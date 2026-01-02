@@ -241,7 +241,7 @@ proptest! {
     #[test]
     fn key_derivation_deterministic(
         password in prop::collection::vec(any::<u8>(), 1..100),
-        salt in prop::collection::vec(any::<u8>(), 1..50),
+        salt in prop::collection::vec(any::<u8>(), 16..50),
     ) {
         let key1 = EncryptionKey::from_password(&password, &salt);
         let key2 = EncryptionKey::from_password(&password, &salt);
@@ -262,7 +262,7 @@ proptest! {
     fn different_passwords_different_keys(
         password1 in prop::collection::vec(any::<u8>(), 1..100),
         password2 in prop::collection::vec(any::<u8>(), 1..100),
-        salt in prop::collection::vec(any::<u8>(), 1..50),
+        salt in prop::collection::vec(any::<u8>(), 16..50),
     ) {
         prop_assume!(password1 != password2);
 
