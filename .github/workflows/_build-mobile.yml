@@ -124,7 +124,7 @@ jobs:
             <key>method</key>
             <string>development</string>
             <key>teamID</key>
-            <string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <string>housaky</string>
           </dict>
           </plist>
           EOF
