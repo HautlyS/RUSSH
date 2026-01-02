@@ -9,6 +9,18 @@ on:
       version:
         type: string
         default: ''
+      sign_ios:
+        type: boolean
+        default: false
+    secrets:
+      APPLE_CERTIFICATE:
+        required: false
+      APPLE_CERTIFICATE_PASSWORD:
+        required: false
+      APPLE_PROVISIONING_PROFILE:
+        required: false
+      APPLE_TEAM_ID:
+        required: false
 
 jobs:
   ios:
@@ -27,37 +39,123 @@ jobs:
         working-directory: russh-client
         run: |
           npm version ${{ inputs.version }} --no-git-tag-version || true
-          sed -i '' 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml || true
+          sed -i '' 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml
 
-      - name: Init & Build iOS
-        working-directory: russh-client
+      - name: Setup signing
+        if: inputs.sign_ios && secrets.APPLE_CERTIFICATE != ''
+        env:
+          CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
         run: |
-          pnpm tauri ios init || true
-          pnpm tauri ios build --release || true
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          
+          # Decode certificate
+          echo "$CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          
+          # Create keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # Import certificate
+          security import $RUNNER_TEMP/certificate.p12 -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          
+          # Install provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROVISIONING_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+          
+          echo "SIGNING_ENABLED=true" >> $GITHUB_ENV
 
-      - name: Create unsigned IPA
+      - name: Init iOS project
+        working-directory: russh-client
+        run: pnpm tauri ios init
+
+      - name: Build iOS (Signed)
+        if: env.SIGNING_ENABLED == 'true'
+        working-directory: russh-client
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm tauri ios build --release
+
+      - name: Build iOS (Unsigned)
+        if: env.SIGNING_ENABLED != 'true'
+        working-directory: russh-client
+        run: pnpm tauri ios build --release || true
+
+      - name: Create IPA
         working-directory: russh-client/src-tauri/gen/apple
         run: |
-          PROJ=$(find . -name "*.xcodeproj" -type d | head -1)
-          [ -z "$PROJ" ] && PROJ=$(find . -name "*.xcworkspace" -type d | head -1)
-          [ -z "$PROJ" ] && exit 0
+          # Find project
+          PROJ=$(find . -maxdepth 1 -name "*.xcworkspace" -type d | head -1)
+          BUILD_TYPE="-workspace"
+          [ -z "$PROJ" ] && { PROJ=$(find . -maxdepth 1 -name "*.xcodeproj" -type d | head -1); BUILD_TYPE="-project"; }
+          [ -z "$PROJ" ] && { echo "No Xcode project found"; exit 1; }
           
-          SCHEME=$(xcodebuild -list -project "$PROJ" 2>/dev/null | awk '/Schemes:/{getline; print; exit}' | xargs)
-          xcodebuild archive -project "$PROJ" -scheme "$SCHEME" \
-            -archivePath "$GITHUB_WORKSPACE/app.xcarchive" \
-            -destination "generic/platform=iOS" \
-            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO || true
+          # Get scheme
+          SCHEME=$(xcodebuild -list $BUILD_TYPE "$PROJ" 2>/dev/null | awk '/Schemes:/{getline; print; exit}' | xargs)
+          [ -z "$SCHEME" ] && { echo "No scheme found"; exit 1; }
           
-          if [ -d "$GITHUB_WORKSPACE/app.xcarchive/Products/Applications" ]; then
+          echo "Building: $BUILD_TYPE $PROJ -scheme $SCHEME"
+          
+          if [ "${{ env.SIGNING_ENABLED }}" = "true" ]; then
+            # Signed build
+            xcodebuild archive $BUILD_TYPE "$PROJ" -scheme "$SCHEME" \
+              -archivePath "$GITHUB_WORKSPACE/app.xcarchive" \
+              -configuration Release \
+              -destination "generic/platform=iOS" \
+              DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}"
+            
+            # Export signed IPA
+            cat > export.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>teamID</key>
+            <string>${{ secrets.APPLE_TEAM_ID }}</string>
+          </dict>
+          </plist>
+          EOF
+            xcodebuild -exportArchive \
+              -archivePath "$GITHUB_WORKSPACE/app.xcarchive" \
+              -exportPath "$GITHUB_WORKSPACE" \
+              -exportOptionsPlist export.plist
+            mv "$GITHUB_WORKSPACE"/*.ipa "$GITHUB_WORKSPACE/RUSSH-ios.ipa"
+          else
+            # Unsigned build
+            xcodebuild archive $BUILD_TYPE "$PROJ" -scheme "$SCHEME" \
+              -archivePath "$GITHUB_WORKSPACE/app.xcarchive" \
+              -configuration Release \
+              -destination "generic/platform=iOS" \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              DEVELOPMENT_TEAM=""
+            
             cd "$GITHUB_WORKSPACE/app.xcarchive/Products"
             mv Applications Payload
             zip -r "$GITHUB_WORKSPACE/RUSSH-ios-unsigned.ipa" Payload
           fi
 
+      - name: Cleanup signing
+        if: always() && env.SIGNING_ENABLED == 'true'
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+
       - uses: actions/upload-artifact@v4
         with:
           name: mobile-ios
-          path: RUSSH-ios-unsigned.ipa
+          path: |
+            RUSSH-ios.ipa
+            RUSSH-ios-unsigned.ipa
           if-no-files-found: warn
 
   android:
@@ -88,13 +186,13 @@ jobs:
         working-directory: russh-client
         run: |
           npm version ${{ inputs.version }} --no-git-tag-version || true
-          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml || true
+          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml
 
       - name: Init & Build Android
         working-directory: russh-client
         run: |
-          pnpm tauri android init || true
-          pnpm tauri android build --apk || true
+          pnpm tauri android init
+          pnpm tauri android build --apk
 
       - uses: actions/upload-artifact@v4
         with:

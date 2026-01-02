@@ -46,6 +46,7 @@ jobs:
     uses: ./.github/workflows/_build-mobile.yml
     with:
       version: ${{ needs.prepare.outputs.version }}
+      sign_ios: true
     secrets: inherit
 
   publish:

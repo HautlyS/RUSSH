@@ -104,14 +104,24 @@ echo "✅ Created: RUSSH-unsigned.ipa"
 
 ## CI/CD
 
-Use the GitHub Actions workflow:
+### Unsigned Build (Default)
+1. Go to **Actions** → **Release** or trigger `_build-mobile.yml`
+2. The workflow creates unsigned IPA by default
 
-1. Go to **Actions** → **Mobile Build**
-2. Select **ios** platform
-3. Choose **release** build type
-4. Click **Run workflow**
+### Signed Build
+Configure these repository secrets for signed builds:
+- `APPLE_CERTIFICATE` - Base64-encoded .p12 certificate
+- `APPLE_CERTIFICATE_PASSWORD` - Certificate password
+- `APPLE_PROVISIONING_PROFILE` - Base64-encoded .mobileprovision
+- `APPLE_TEAM_ID` - Your Apple Developer Team ID
 
-The unsigned IPA will be available as a build artifact.
+To encode files:
+```bash
+base64 -i certificate.p12 | pbcopy
+base64 -i profile.mobileprovision | pbcopy
+```
+
+The release workflow automatically uses signing when secrets are configured.
 
 ## Installing Unsigned IPA
 

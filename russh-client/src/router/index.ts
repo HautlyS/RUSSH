@@ -1,9 +1,19 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 
+// Check if running in Tauri or web
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
+    name: 'home',
+    component: () => isTauri 
+      ? import('@/views/DashboardView.vue') 
+      : import('@/views/LandingView.vue'),
+  },
+  {
+    path: '/dashboard',
     name: 'dashboard',
     component: () => import('@/views/DashboardView.vue'),
   },
