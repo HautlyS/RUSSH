@@ -16,6 +16,7 @@ pub struct ConnectionRequest {
     pub auth_type: String,
     pub password: Option<String>,
     pub key_path: Option<String>,
+    #[allow(dead_code)]
     pub key_passphrase: Option<String>,
 }
 
@@ -35,6 +36,7 @@ pub struct ConnectionResponse {
 pub struct CommandRequest {
     pub session_id: String,
     pub command: String,
+    #[allow(dead_code)]
     pub timeout_secs: Option<u64>,
 }
 

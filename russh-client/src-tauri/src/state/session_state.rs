@@ -60,22 +60,27 @@ impl SessionState {
         self.info.status = SessionStatus::Connected;
     }
 
+    #[allow(dead_code)]
     pub fn set_disconnected(&mut self) {
         self.info.status = SessionStatus::Disconnected;
     }
 
+    #[allow(dead_code)]
     pub fn set_error(&mut self) {
         self.info.status = SessionStatus::Error;
     }
 
+    #[allow(dead_code)]
     pub fn increment_commands(&mut self) {
         self.info.stats.commands_executed += 1;
     }
 
+    #[allow(dead_code)]
     pub fn add_bytes_sent(&mut self, bytes: u64) {
         self.info.stats.bytes_sent += bytes;
     }
 
+    #[allow(dead_code)]
     pub fn add_bytes_received(&mut self, bytes: u64) {
         self.info.stats.bytes_received += bytes;
     }

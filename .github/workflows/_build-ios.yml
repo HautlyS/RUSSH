@@ -75,16 +75,17 @@ jobs:
           mkdir -p gen/apple/Externals/arm64/release
           
           # The library name from Cargo.toml is russh-client -> librussh_client.a
-          LIB_FILE=$(find target/aarch64-apple-ios/release -name "librussh_client.a" -type f | head -1)
+          # Note: We are in src-tauri, but the workspace root is ../../, so target is ../../target
+          LIB_FILE=$(find ../../target/aarch64-apple-ios/release -name "librussh_client.a" -type f | head -1)
           
           if [ -z "$LIB_FILE" ]; then
              echo "Looking for any .a file..."
-             LIB_FILE=$(find target/aarch64-apple-ios/release -name "*.a" -type f | head -1)
+             LIB_FILE=$(find ../../target/aarch64-apple-ios/release -name "*.a" -type f | head -1)
           fi
           
           if [ -z "$LIB_FILE" ] || [ ! -f "$LIB_FILE" ]; then
             echo "❌ No .a library found"
-            ls -la target/aarch64-apple-ios/release/ || true
+            ls -la ../../target/aarch64-apple-ios/release/ || true
             exit 1
           fi
           

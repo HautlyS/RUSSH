@@ -25,18 +25,22 @@ pub enum AppError {
     ProfileNotFound(String),
 
     #[error("File operation failed: {0}")]
+    #[allow(dead_code)]
     FileOperationFailed(String),
 
     #[error("Transfer failed: {0}")]
+    #[allow(dead_code)]
     TransferFailed(String),
 
     #[error("P2P connection failed: {0}")]
+    #[allow(dead_code)]
     P2PConnectionFailed(String),
 
     #[error("Peer not found: {0}")]
     PeerNotFound(String),
 
     #[error("Settings error: {0}")]
+    #[allow(dead_code)]
     SettingsError(String),
 
     #[error("Serialization error: {0}")]
