@@ -1,0 +1,103 @@
+name: Build Mobile
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        type: string
+        default: 'both'
+      version:
+        type: string
+        default: ''
+
+jobs:
+  ios:
+    name: iOS
+    if: inputs.platform == 'ios' || inputs.platform == 'both'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-env
+        with:
+          rust-targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Update version
+        if: inputs.version != ''
+        working-directory: russh-client
+        run: |
+          npm version ${{ inputs.version }} --no-git-tag-version || true
+          sed -i '' 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml || true
+
+      - name: Init & Build iOS
+        working-directory: russh-client
+        run: |
+          pnpm tauri ios init || true
+          pnpm tauri ios build --release || true
+
+      - name: Create unsigned IPA
+        working-directory: russh-client/src-tauri/gen/apple
+        run: |
+          PROJ=$(find . -name "*.xcodeproj" -type d | head -1)
+          [ -z "$PROJ" ] && PROJ=$(find . -name "*.xcworkspace" -type d | head -1)
+          [ -z "$PROJ" ] && exit 0
+          
+          SCHEME=$(xcodebuild -list -project "$PROJ" 2>/dev/null | awk '/Schemes:/{getline; print; exit}' | xargs)
+          xcodebuild archive -project "$PROJ" -scheme "$SCHEME" \
+            -archivePath "$GITHUB_WORKSPACE/app.xcarchive" \
+            -destination "generic/platform=iOS" \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO || true
+          
+          if [ -d "$GITHUB_WORKSPACE/app.xcarchive/Products/Applications" ]; then
+            cd "$GITHUB_WORKSPACE/app.xcarchive/Products"
+            mv Applications Payload
+            zip -r "$GITHUB_WORKSPACE/RUSSH-ios-unsigned.ipa" Payload
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-ios
+          path: RUSSH-ios-unsigned.ipa
+          if-no-files-found: warn
+
+  android:
+    name: Android
+    if: inputs.platform == 'android' || inputs.platform == 'both'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-env
+        with:
+          rust-targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          sdkmanager --install "ndk;26.1.10909125"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+
+      - name: Update version
+        if: inputs.version != ''
+        working-directory: russh-client
+        run: |
+          npm version ${{ inputs.version }} --no-git-tag-version || true
+          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml || true
+
+      - name: Init & Build Android
+        working-directory: russh-client
+        run: |
+          pnpm tauri android init || true
+          pnpm tauri android build --apk || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android
+          path: russh-client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn

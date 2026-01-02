@@ -1,0 +1,65 @@
+name: Build Desktop
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifacts:
+        type: boolean
+        default: true
+      version:
+        type: string
+        default: ''
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - name: macOS ARM
+            os: macos-14
+            target: aarch64-apple-darwin
+          - name: macOS Intel
+            os: macos-13
+            target: x86_64-apple-darwin
+          - name: Windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-env
+        with:
+          rust-targets: ${{ matrix.target }}
+          install-linux-deps: ${{ contains(matrix.os, 'ubuntu') && 'true' || 'false' }}
+
+      - name: Update version
+        if: inputs.version != ''
+        working-directory: russh-client
+        shell: bash
+        run: |
+          npm version ${{ inputs.version }} --no-git-tag-version || true
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            sed -i '' 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml || true
+          else
+            sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml || true
+          fi
+
+      - name: Build
+        working-directory: russh-client
+        run: pnpm tauri build --target ${{ matrix.target }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.upload-artifacts
+        with:
+          name: desktop-${{ matrix.target }}
+          path: russh-client/src-tauri/target/${{ matrix.target }}/release/bundle/
+          if-no-files-found: warn

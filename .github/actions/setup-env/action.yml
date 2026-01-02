@@ -1,0 +1,51 @@
+name: 'Setup Environment'
+description: 'Setup Node, pnpm, Rust and dependencies'
+
+inputs:
+  rust-targets:
+    description: 'Additional Rust targets to install'
+    required: false
+    default: ''
+  install-linux-deps:
+    description: 'Install Linux Tauri dependencies'
+    required: false
+    default: 'false'
+  working-directory:
+    description: 'Working directory for pnpm install'
+    required: false
+    default: 'russh-client'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Linux dependencies
+      if: inputs.install-linux-deps == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libglib2.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.rust-targets }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.rust-targets || 'default' }}
+
+    - name: Install frontend dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: pnpm install --frozen-lockfile
