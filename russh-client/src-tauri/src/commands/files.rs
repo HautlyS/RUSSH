@@ -1,7 +1,7 @@
 //! File transfer Tauri commands
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, Window};
+use tauri::{Emitter, State, Window};
 use uuid::Uuid;
 
 use crate::error::AppError;
