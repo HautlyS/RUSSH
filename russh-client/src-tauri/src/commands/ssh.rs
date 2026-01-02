@@ -1,7 +1,7 @@
 //! SSH-related Tauri commands
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, Window};
+use tauri::{Emitter, State, Window};
 
 use crate::error::AppError;
 use crate::state::AppState;

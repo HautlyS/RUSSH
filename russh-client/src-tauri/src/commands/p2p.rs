@@ -80,7 +80,7 @@ pub async fn p2p_generate_qr(
     // Convert to PNG bytes
     let mut png_bytes = Vec::new();
     let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
-    encoder.encode(
+    encoder.write_image(
         image.as_raw(),
         image.width(),
         image.height(),
