@@ -59,6 +59,7 @@ runs:
         find . -name "project.pbxproj" -type f | while read pbx; do
           echo "Patching pbxproj: $pbx"
           sed -i '' 's/--configuration \${CONFIGURATION:\?}/--configuration Release/g' "$pbx"
+          sed -i '' 's/GCC_PREPROCESSOR_DEFINITIONS:-/IGNORE_GCC_DEFINITIONS:-/g' "$pbx"
         done
 
     - name: Build frontend
