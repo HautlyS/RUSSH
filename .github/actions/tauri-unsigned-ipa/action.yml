@@ -43,9 +43,26 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: pnpm tauri ios init
 
+    - name: Patch Xcode scheme for Release
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}/src-tauri/gen/apple
+      run: |
+        # Find and patch all schemes to use Release configuration
+        find . -name "*.xcscheme" -type f | while read scheme; do
+          echo "Patching scheme: $scheme"
+          sed -i '' 's/buildConfiguration = "Debug"/buildConfiguration = "Release"/g' "$scheme"
+        done
+
+    - name: Build frontend
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: pnpm build
+
     - name: Build & Archive (Unsigned)
       shell: bash
       working-directory: ${{ inputs.working-directory }}/src-tauri/gen/apple
+      env:
+        TAURI_CLI_NO_DEV_SERVER_WAIT: "true"
       run: |
         PROJ=$(find . -maxdepth 1 -name "*.xcworkspace" -type d | head -1)
         BUILD_TYPE="-workspace"
@@ -58,7 +75,9 @@ runs:
           -destination "generic/platform=iOS" \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=NO \
+          SKIP_INSTALL=NO \
+          BUILD_LIBRARY_FOR_DISTRIBUTION=YES
 
     - name: Package IPA
       id: package
