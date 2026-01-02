@@ -21,10 +21,12 @@ jobs:
     name: Desktop
     needs: test
     uses: ./.github/workflows/_build-desktop.yml
+    secrets: inherit
 
   build-mobile:
     name: Mobile
     needs: test
     uses: ./.github/workflows/_build-mobile.yml
+    secrets: inherit
     with:
       platform: both
