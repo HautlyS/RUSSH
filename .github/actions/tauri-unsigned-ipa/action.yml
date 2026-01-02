@@ -52,6 +52,14 @@ runs:
           echo "Patching scheme: $scheme"
           sed -i '' 's/buildConfiguration = "Debug"/buildConfiguration = "Release"/g' "$scheme"
         done
+        
+        # Patch project.pbxproj to force Release configuration in the tauri script
+        # This prevents the "missing addr file" panic by ensuring tauri-cli runs in release mode
+        # even if Xcode passes something else or if it defaults to Debug behavior
+        find . -name "project.pbxproj" -type f | while read pbx; do
+          echo "Patching pbxproj: $pbx"
+          sed -i '' 's/--configuration \${CONFIGURATION:\?}/--configuration Release/g' "$pbx"
+        done
 
     - name: Build frontend
       shell: bash

@@ -90,6 +90,12 @@ jobs:
             sed -i '' 's/buildConfiguration = "Debug"/buildConfiguration = "Release"/g' "$scheme"
           done
 
+          # Patch project.pbxproj to force Release configuration in the tauri script
+          find . -name "project.pbxproj" -type f | while read pbx; do
+            echo "Patching pbxproj: $pbx"
+            sed -i '' 's/--configuration \${CONFIGURATION:\?}/--configuration Release/g' "$pbx"
+          done
+
       - name: Build frontend
         working-directory: russh-client
         run: pnpm build
