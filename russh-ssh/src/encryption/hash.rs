@@ -163,7 +163,7 @@ pub async fn hash_file_async(path: &Path) -> Result<ContentHash, HashError> {
 pub async fn hash_file_spawn_blocking(path: impl AsRef<Path> + Send + 'static) -> Result<ContentHash, HashError> {
     tokio::task::spawn_blocking(move || hash_file(path.as_ref()))
         .await
-        .map_err(|e| HashError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        .map_err(|e| HashError::Io(std::io::Error::other(e.to_string())))?
 }
 
 /// Compute BLAKE3 hash from a reader

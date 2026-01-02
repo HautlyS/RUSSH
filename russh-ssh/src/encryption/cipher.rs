@@ -45,7 +45,7 @@ impl serde::Serialize for EncryptedMessage {
         use base64::{Engine as _, engine::general_purpose::STANDARD};
         let mut state = serializer.serialize_struct("EncryptedMessage", 3)?;
         state.serialize_field("ciphertext", &STANDARD.encode(&self.ciphertext))?;
-        state.serialize_field("nonce", &STANDARD.encode(&self.nonce))?;
+        state.serialize_field("nonce", &STANDARD.encode(self.nonce))?;
         state.serialize_field("plaintext_hash", &self.plaintext_hash)?;
         state.end()
     }

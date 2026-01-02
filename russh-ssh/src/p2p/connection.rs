@@ -119,7 +119,7 @@ impl P2PConnection {
         
         // Get connection type from the endpoint (Iroh tracks this at endpoint level)
         if let Ok(conn_type_watcher) = self.endpoint.endpoint().conn_type(self.peer_id) {
-            if let Some(conn_type) = conn_type_watcher.get().ok() {
+            if let Ok(conn_type) = conn_type_watcher.get() {
                 info.connection_type = match conn_type {
                     IrohConnectionType::Direct(addr) => {
                         info.remote_addr = Some(addr);

@@ -10,9 +10,10 @@ use tokio::sync::broadcast;
 const STATE_CHANNEL_CAPACITY: usize = 16;
 
 /// Connection state tracking
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ConnectionState {
     /// Not connected to any host
+    #[default]
     Disconnected,
     /// Currently attempting to connect
     Connecting,
@@ -103,11 +104,7 @@ impl ConnectionState {
     }
 }
 
-impl Default for ConnectionState {
-    fn default() -> Self {
-        ConnectionState::Disconnected
-    }
-}
+
 
 impl std::fmt::Display for ConnectionState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

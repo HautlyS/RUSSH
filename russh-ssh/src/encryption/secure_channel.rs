@@ -62,7 +62,7 @@ impl Serialize for Identity {
     {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("Identity", 2)?;
-        state.serialize_field("public_key", &hex::encode(&self.public_key))?;
+        state.serialize_field("public_key", &hex::encode(self.public_key))?;
         state.serialize_field("identifier", &self.identifier)?;
         state.end()
     }
@@ -309,7 +309,7 @@ impl SecureChannel {
         Ok(SecureMessage {
             encrypted,
             counter,
-            sender: self.local_identity.identifier.clone(),
+            sender: self.local_identity.identifier,
         })
     }
 

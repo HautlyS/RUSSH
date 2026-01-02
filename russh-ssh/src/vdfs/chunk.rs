@@ -270,8 +270,8 @@ mod tests {
         
         // Only keep id1 and id3
         let mut referenced = std::collections::HashSet::new();
-        referenced.insert(id1.clone());
-        referenced.insert(id3.clone());
+        referenced.insert(id1);
+        referenced.insert(id3);
         
         let (removed, freed) = store.garbage_collect(&referenced).await;
         

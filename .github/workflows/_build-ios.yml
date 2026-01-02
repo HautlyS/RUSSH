@@ -1,126 +1,198 @@
-name: Build iOS
+name: Build iOS (Unsigned)
 
 on:
-  workflow_call:
-    inputs:
-      version:
-        type: string
-        default: ''
-      sign:
-        type: boolean
-        default: false
-    secrets:
-      APPLE_CERTIFICATE:
-        required: false
-      APPLE_CERTIFICATE_PASSWORD:
-        required: false
-      APPLE_PROVISIONING_PROFILE:
-        required: false
-      APPLE_TEAM_ID:
-        required: false
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'russh-client/**'
+      - '.github/workflows/_build-ios.yml'
+      - '.github/scripts/patch_ios_project.py'
 
 jobs:
-  build:
-    name: iOS
-    runs-on: macos-14
-    env:
-      SIGNING_ENABLED: 'false'
+  build-ios-unsigned:
+    name: Build iOS (Unsigned)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/setup-env
+      - uses: pnpm/action-setup@v4
         with:
-          rust-targets: aarch64-apple-ios,aarch64-apple-ios-sim
+          version: 9
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: russh-client/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
         with:
           workspaces: "russh-client/src-tauri -> target"
-          key: ios
 
-      - name: Update version
-        if: inputs.version != ''
+      - name: Install dependencies
         working-directory: russh-client
-        run: |
-          npm version ${{ inputs.version }} --no-git-tag-version || true
-          sed -i '' 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml
-
-      - name: Setup signing
-        if: inputs.sign
-        env:
-          CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
-        run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
-          echo "$CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security import $RUNNER_TEMP/certificate.p12 -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$PROVISIONING_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
-          echo "SIGNING_ENABLED=true" >> $GITHUB_ENV
-
-      - name: Init iOS
-        working-directory: russh-client
-        run: pnpm tauri ios init
-
-      - name: Patch Xcode for Release
-        working-directory: russh-client/src-tauri/gen/apple
-        run: |
-          find . -name "*.xcscheme" -exec sed -i '' 's/buildConfiguration = "Debug"/buildConfiguration = "Release"/g' {} \;
-          find . -name "project.pbxproj" -exec sed -i '' 's/--configuration \${CONFIGURATION:\?}/--configuration Release/g' {} \;
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
         working-directory: russh-client
-        run: pnpm build
+        run: pnpm run build
 
-      - name: Build Rust
-        working-directory: russh-client/src-tauri
-        run: cargo build --release --target aarch64-apple-ios
-
-      - name: Create IPA
-        working-directory: russh-client/src-tauri/gen/apple
-        env:
-          TAURI_CLI_NO_DEV_SERVER_WAIT: "true"
+      - name: Verify frontend dist exists
+        working-directory: russh-client
         run: |
-          PROJ=$(find . -maxdepth 1 -name "*.xcworkspace" -o -name "*.xcodeproj" | head -1)
-          BUILD_TYPE=$([[ "$PROJ" == *.xcworkspace ]] && echo "-workspace" || echo "-project")
-          SCHEME=$(xcodebuild -list $BUILD_TYPE "$PROJ" 2>/dev/null | awk '/Schemes:/{getline; print; exit}' | xargs)
+          if [ ! -d "dist" ]; then
+            echo "❌ Frontend dist folder not found!"
+            exit 1
+          fi
+          echo "✅ Frontend dist exists:"
+          ls -la dist/
+
+      - name: Initialize iOS project
+        working-directory: russh-client
+        run: pnpm tauri ios init
+
+      - name: Patch iOS project for unsigned release build
+        working-directory: russh-client
+        run: python3 ../.github/scripts/patch_ios_project.py
+
+      - name: Build Rust library for iOS device (Release)
+        working-directory: russh-client
+        run: |
+          cd src-tauri
+          cargo build --release --target aarch64-apple-ios
           
-          if [ "$SIGNING_ENABLED" = "true" ]; then
-            xcodebuild archive $BUILD_TYPE "$PROJ" -scheme "$SCHEME" \
-              -archivePath "$GITHUB_WORKSPACE/app.xcarchive" \
-              -configuration Release -destination "generic/platform=iOS" \
-              DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" SKIP_INSTALL=NO
-            cat > export.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict><key>method</key><string>development</string></dict></plist>
-          EOF
-            xcodebuild -exportArchive -archivePath "$GITHUB_WORKSPACE/app.xcarchive" \
-              -exportPath "$GITHUB_WORKSPACE" -exportOptionsPlist export.plist
-            mv "$GITHUB_WORKSPACE"/*.ipa "$GITHUB_WORKSPACE/RUSSH-ios.ipa"
-          else
-            xcodebuild archive $BUILD_TYPE "$PROJ" -scheme "$SCHEME" \
-              -archivePath "$GITHUB_WORKSPACE/app.xcarchive" \
-              -configuration Release -destination "generic/platform=iOS" \
-              CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO SKIP_INSTALL=NO
-            cd "$GITHUB_WORKSPACE/app.xcarchive/Products" && mv Applications Payload
-            zip -r "$GITHUB_WORKSPACE/RUSSH-ios-unsigned.ipa" Payload
+          # Copy to both debug and release folders (Xcode may look in either)
+          mkdir -p gen/apple/Externals/arm64/debug
+          mkdir -p gen/apple/Externals/arm64/release
+          
+          # The library name from Cargo.toml is russh-client -> librussh_client.a
+          LIB_FILE=$(find target/aarch64-apple-ios/release -name "librussh_client.a" -type f | head -1)
+          
+          if [ -z "$LIB_FILE" ]; then
+             echo "Looking for any .a file..."
+             LIB_FILE=$(find target/aarch64-apple-ios/release -name "*.a" -type f | head -1)
+          fi
+          
+          if [ -z "$LIB_FILE" ] || [ ! -f "$LIB_FILE" ]; then
+            echo "❌ No .a library found"
+            ls -la target/aarch64-apple-ios/release/ || true
+            exit 1
+          fi
+          
+          echo "Found library: $LIB_FILE"
+          
+          # Target destination for Tauri 2.0 structure
+          # Usually it goes into gen/apple/Externals usually
+          cp "$LIB_FILE" gen/apple/Externals/arm64/debug/libapp.a
+          cp "$LIB_FILE" gen/apple/Externals/arm64/release/libapp.a
+          
+          echo "✅ Rust library built and copied"
+          ls -la gen/apple/Externals/arm64/*/
+
+      - name: Copy frontend assets to iOS project
+        working-directory: russh-client
+        run: |
+          # Tauri iOS expects the dist folder to be available
+          echo "Frontend dist contents:"
+          ls -la dist/
+          
+          APPLE_DIR="src-tauri/gen/apple"
+          
+          # Check if assets are properly placed or recognized
+          if [ -d "$APPLE_DIR/Sources" ]; then
+            echo "Found Sources directory"
+            ls -la "$APPLE_DIR/Sources/" || true
           fi
 
-      - name: Cleanup signing
-        if: always() && inputs.sign
-        run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+      - name: Build iOS Archive (Unsigned Release)
+        working-directory: russh-client
+        run: |
+          set -e
+          
+          XCODEPROJ=$(find src-tauri/gen/apple -name "*.xcodeproj" -type d | head -1)
+          echo "Project: $XCODEPROJ"
+          
+          SCHEME=$(xcodebuild -project "$XCODEPROJ" -list 2>/dev/null | \
+            awk '/Schemes:/{flag=1; next} flag && /^$/{flag=0} flag' | \
+            sed 's/^[[:space:]]*//' | grep -i ios | head -1)
+          
+          [ -z "$SCHEME" ] && SCHEME=$(xcodebuild -project "$XCODEPROJ" -list 2>/dev/null | \
+            awk '/Schemes:/{flag=1; next} flag && /^$/{flag=0} flag' | \
+            sed 's/^[[:space:]]*//' | head -1)
+          
+          echo "Scheme: $SCHEME"
+          
+          # Use the xcconfig if it exists (created by patch script)
+          XCCONFIG=""
+          if [ -f "src-tauri/gen/apple/Release-Unsigned.xcconfig" ]; then
+            XCCONFIG="-xcconfig src-tauri/gen/apple/Release-Unsigned.xcconfig"
+          fi
+          
+          # Build with Release configuration and proper settings
+          xcodebuild archive \
+            -project "$XCODEPROJ" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -archivePath ./unsigned.xcarchive \
+            -destination "generic/platform=iOS" \
+            $XCCONFIG \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            GCC_PREPROCESSOR_DEFINITIONS='$(inherited) RELEASE=1 NDEBUG=1' \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='RELEASE' \
+            ENABLE_BITCODE=NO
+          
+          echo "✅ Archive created"
 
-      - uses: actions/upload-artifact@v4
+      - name: Package IPA from Archive
+        working-directory: russh-client
+        run: |
+          set -e
+          
+          ARCHIVE_PATH="./unsigned.xcarchive"
+          
+          if [ ! -d "$ARCHIVE_PATH" ]; then
+            echo "❌ Archive not found"
+            exit 1
+          fi
+          
+          APP_PATH=$(find "$ARCHIVE_PATH/Products/Applications" -name "*.app" -type d 2>/dev/null | head -1)
+          
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find "$ARCHIVE_PATH" -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ No .app found in archive"
+            exit 1
+          fi
+          
+          echo "✅ Found: $APP_PATH"
+          
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r -q iMAGE-unsigned.ipa Payload/
+          rm -rf Payload
+          
+          echo "✅ IPA created: iMAGE-unsigned.ipa"
+          ls -la iMAGE-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa
-          path: |
-            RUSSH-ios.ipa
-            RUSSH-ios-unsigned.ipa
-          if-no-files-found: warn
+          name: ios-unsigned-ipa
+          path: russh-client/iMAGE-unsigned.ipa
+          retention-days: 30

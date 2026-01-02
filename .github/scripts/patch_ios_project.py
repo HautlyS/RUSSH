@@ -51,6 +51,13 @@ def patch_pbxproj(path):
             if new_line != line:
                 line = new_line
                 modified = True
+
+        # Handle PROVISIONING_PROFILE_SPECIFIER with regex
+        if 'PROVISIONING_PROFILE_SPECIFIER' in line and '""' not in line:
+            new_line = re.sub(r'PROVISIONING_PROFILE_SPECIFIER\s*=\s*[^;]+;', 'PROVISIONING_PROFILE_SPECIFIER = "";', line)
+            if new_line != line:
+                line = new_line
+                modified = True
         
         new_lines.append(line)
     
@@ -145,6 +152,8 @@ CODE_SIGNING_REQUIRED = NO
 CODE_SIGNING_ALLOWED = NO
 DEVELOPMENT_TEAM = 
 AD_HOC_CODE_SIGNING_ALLOWED = NO
+PROVISIONING_PROFILE_SPECIFIER = 
+PROVISIONING_PROFILE = 
 
 // Ensure release optimizations
 GCC_OPTIMIZATION_LEVEL = s
