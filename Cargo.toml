@@ -1,5 +1,5 @@
 [workspace]
-members = ["russh-ssh", "russh-ssh-cli"]
+members = ["russh-ssh", "russh-ssh-cli", "russh-client/src-tauri"]
 resolver = "2"
 
 [workspace.package]
