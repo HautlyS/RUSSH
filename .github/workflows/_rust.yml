@@ -1,0 +1,31 @@
+name: Rust
+
+on:
+  workflow_call:
+    inputs:
+      skip:
+        type: boolean
+        default: false
+
+jobs:
+  check:
+    name: Check
+    if: ${{ !inputs.skip }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-env
+        with:
+          install-linux-deps: 'true'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Test
+        run: cargo test --workspace

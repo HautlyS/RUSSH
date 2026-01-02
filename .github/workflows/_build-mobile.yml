@@ -107,6 +107,12 @@ jobs:
           cd src-tauri
           cargo build --release --target aarch64-apple-ios
 
+      - name: Patch tauri.conf.json (Disable devUrl)
+        working-directory: russh-client
+        run: |
+          # Rename devUrl to _devUrl to force tauri-cli to treat this as a production build
+          sed -i '' 's/"devUrl"/"_devUrl"/' src-tauri/tauri.conf.json
+
       - name: Create IPA
         working-directory: russh-client/src-tauri/gen/apple
         env:

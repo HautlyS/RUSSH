@@ -67,6 +67,14 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: pnpm build
 
+    - name: Patch tauri.conf.json (Disable devUrl)
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        # Rename devUrl to _devUrl to force tauri-cli to treat this as a production build
+        # and prevent the "missing addr file" panic
+        sed -i '' 's/"devUrl"/"_devUrl"/' src-tauri/tauri.conf.json
+
     - name: Build & Archive (Unsigned)
       shell: bash
       working-directory: ${{ inputs.working-directory }}/src-tauri/gen/apple

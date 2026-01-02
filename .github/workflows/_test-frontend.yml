@@ -1,0 +1,48 @@
+name: Frontend Tests
+
+on:
+  workflow_call:
+    inputs:
+      skip:
+        type: boolean
+        default: false
+      run-e2e:
+        type: boolean
+        default: false
+
+jobs:
+  test:
+    name: Test
+    if: ${{ !inputs.skip }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: russh-client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-env
+        with:
+          install-linux-deps: ${{ inputs.run-e2e && 'true' || 'false' }}
+
+      - name: Lint
+        run: pnpm lint || true
+
+      - name: Type check
+        run: pnpm type-check || true
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Install Playwright
+        if: inputs.run-e2e
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E tests
+        if: inputs.run-e2e
+        run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure() && inputs.run-e2e
+        with:
+          name: playwright-report
+          path: russh-client/playwright-report/

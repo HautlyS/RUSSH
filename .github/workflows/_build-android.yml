@@ -1,0 +1,55 @@
+name: Build Android
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: ''
+
+jobs:
+  build:
+    name: Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-env
+        with:
+          rust-targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "russh-client/src-tauri -> target"
+          key: android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          sdkmanager --install "ndk;26.1.10909125"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+
+      - name: Update version
+        if: inputs.version != ''
+        working-directory: russh-client
+        run: |
+          npm version ${{ inputs.version }} --no-git-tag-version || true
+          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml
+
+      - name: Build
+        working-directory: russh-client
+        run: |
+          pnpm tauri android init
+          pnpm tauri android build --apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: russh-client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn

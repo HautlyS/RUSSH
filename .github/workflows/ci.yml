@@ -41,27 +41,49 @@ jobs:
             workflows:
               - '.github/workflows/**'
 
-  test:
-    name: Test
+  rust:
+    name: Rust
     needs: changes
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_rust.yml
     with:
-      run-e2e: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      skip-rust: ${{ needs.changes.outputs.rust != 'true' && needs.changes.outputs.workflows != 'true' }}
-      skip-frontend: ${{ needs.changes.outputs.frontend != 'true' && needs.changes.outputs.workflows != 'true' }}
+      skip: ${{ needs.changes.outputs.rust != 'true' && needs.changes.outputs.workflows != 'true' }}
 
-  build-desktop:
+  frontend:
+    name: Frontend
+    needs: changes
+    uses: ./.github/workflows/_test-frontend.yml
+    with:
+      skip: ${{ needs.changes.outputs.frontend != 'true' && needs.changes.outputs.workflows != 'true' }}
+      run-e2e: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+  desktop:
     name: Desktop
-    needs: [changes, test]
-    if: needs.changes.outputs.tauri == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [changes, rust, frontend]
+    if: |
+      always() &&
+      (needs.rust.result == 'success' || needs.rust.result == 'skipped') &&
+      (needs.frontend.result == 'success' || needs.frontend.result == 'skipped') &&
+      (needs.changes.outputs.tauri == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch')
     uses: ./.github/workflows/_build-desktop.yml
     secrets: inherit
 
-  build-mobile:
-    name: Mobile
-    needs: [changes, test]
-    if: needs.changes.outputs.tauri == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
-    uses: ./.github/workflows/_build-mobile.yml
+  android:
+    name: Android
+    needs: [changes, rust, frontend]
+    if: |
+      always() &&
+      (needs.rust.result == 'success' || needs.rust.result == 'skipped') &&
+      (needs.frontend.result == 'success' || needs.frontend.result == 'skipped') &&
+      (needs.changes.outputs.tauri == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch')
+    uses: ./.github/workflows/_build-android.yml
+
+  ios:
+    name: iOS
+    needs: [changes, rust, frontend]
+    if: |
+      always() &&
+      (needs.rust.result == 'success' || needs.rust.result == 'skipped') &&
+      (needs.frontend.result == 'success' || needs.frontend.result == 'skipped') &&
+      (needs.changes.outputs.tauri == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch')
+    uses: ./.github/workflows/_build-ios.yml
     secrets: inherit
-    with:
-      platform: both
