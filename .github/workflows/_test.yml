@@ -7,20 +7,33 @@ on:
         description: 'Run E2E tests'
         type: boolean
         default: false
+      skip-rust:
+        description: 'Skip Rust tests'
+        type: boolean
+        default: false
+      skip-frontend:
+        description: 'Skip frontend tests'
+        type: boolean
+        default: false
 
 jobs:
   rust:
     name: Rust Tests
+    if: ${{ !inputs.skip-rust }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-env
         with:
           install-linux-deps: 'true'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
       - run: cargo test --workspace
 
   frontend:
     name: Frontend Tests
+    if: ${{ !inputs.skip-frontend }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -37,7 +50,7 @@ jobs:
 
   e2e:
     name: E2E Tests
-    if: inputs.run-e2e
+    if: inputs.run-e2e && !inputs.skip-frontend
     runs-on: ubuntu-latest
     defaults:
       run:

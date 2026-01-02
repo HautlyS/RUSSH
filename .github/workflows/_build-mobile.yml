@@ -34,6 +34,11 @@ jobs:
         with:
           rust-targets: aarch64-apple-ios,aarch64-apple-ios-sim
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "russh-client/src-tauri -> target"
+          key: ios
+
       - name: Update version
         if: inputs.version != ''
         working-directory: russh-client
@@ -168,6 +173,11 @@ jobs:
       - uses: ./.github/actions/setup-env
         with:
           rust-targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "russh-client/src-tauri -> target"
+          key: android
 
       - uses: actions/setup-java@v4
         with:

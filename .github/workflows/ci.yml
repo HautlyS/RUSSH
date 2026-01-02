@@ -3,6 +3,13 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'russh-ssh/**'
+      - 'russh-ssh-cli/**'
+      - 'russh-client/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/**'
   pull_request:
     branches: [main]
 
@@ -11,21 +18,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      tauri: ${{ steps.filter.outputs.tauri }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'russh-ssh/**'
+              - 'russh-ssh-cli/**'
+              - 'russh-client/src-tauri/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+            frontend:
+              - 'russh-client/src/**'
+              - 'russh-client/package.json'
+              - 'russh-client/pnpm-lock.yaml'
+            tauri:
+              - 'russh-client/**'
+
   test:
     name: Test
+    needs: changes
     uses: ./.github/workflows/_test.yml
     with:
       run-e2e: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      skip-rust: ${{ needs.changes.outputs.rust != 'true' }}
+      skip-frontend: ${{ needs.changes.outputs.frontend != 'true' }}
 
   build-desktop:
     name: Desktop
-    needs: test
+    needs: [changes, test]
+    if: needs.changes.outputs.tauri == 'true'
     uses: ./.github/workflows/_build-desktop.yml
     secrets: inherit
 
   build-mobile:
     name: Mobile
-    needs: test
+    needs: [changes, test]
+    if: needs.changes.outputs.tauri == 'true'
     uses: ./.github/workflows/_build-mobile.yml
     secrets: inherit
     with:

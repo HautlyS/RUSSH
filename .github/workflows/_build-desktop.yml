@@ -43,6 +43,11 @@ jobs:
           rust-targets: ${{ matrix.target }}
           install-linux-deps: ${{ contains(matrix.os, 'ubuntu') && 'true' || 'false' }}
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "russh-client/src-tauri -> target"
+          key: ${{ matrix.target }}
+
       - name: Update version
         if: inputs.version != ''
         working-directory: russh-client
