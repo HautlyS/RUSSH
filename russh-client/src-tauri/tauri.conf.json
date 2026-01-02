@@ -39,7 +39,7 @@
       "icons/icon.ico"
     ],
     "iOS": {
-      "developmentTeam": "",
+      "developmentTeam": "housaky",
       "minimumSystemVersion": "13.0"
     },
     "android": {
