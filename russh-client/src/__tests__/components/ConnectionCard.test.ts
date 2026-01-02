@@ -9,7 +9,7 @@ vi.mock('@/composables/useVisualEffects', () => ({
   useVisualEffects: () => ({
     isMagnetEnabled: { value: false },
     isDecryptedTextEnabled: { value: false },
-    visualEffects: { value: { magnet: {}, decryptedText: {} } },
+    visualEffects: { magnet: {}, decryptedText: { speed: 50 } },
   }),
 }));
 
