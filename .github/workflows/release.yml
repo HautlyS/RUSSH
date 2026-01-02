@@ -78,18 +78,21 @@ jobs:
         if: contains(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libglib2.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: russh-client/package-lock.json
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       
       - name: Install frontend dependencies
         working-directory: russh-client
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -108,7 +111,7 @@ jobs:
       
       - name: Build Tauri app
         working-directory: russh-client
-        run: npm run tauri build -- --target ${{ matrix.target }}
+        run: pnpm tauri build --target ${{ matrix.target }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -141,12 +144,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: russh-client/package-lock.json
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       
       - name: Install frontend dependencies
         working-directory: russh-client
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -162,11 +168,11 @@ jobs:
       
       - name: Initialize iOS project
         working-directory: russh-client
-        run: npm run tauri ios init || true
+        run: pnpm tauri ios init || true
       
       - name: Build iOS
         working-directory: russh-client
-        run: npm run tauri ios build --release
+        run: pnpm tauri ios build --release
         continue-on-error: true
       
       - name: Build unsigned xcarchive
@@ -247,12 +253,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: russh-client/package-lock.json
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       
       - name: Install frontend dependencies
         working-directory: russh-client
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -268,15 +277,17 @@ jobs:
       
       - name: Initialize Android project
         working-directory: russh-client
-        run: npm run tauri android init || true
+        run: pnpm tauri android init || true
       
       - name: Build Android APK
         working-directory: russh-client
-        run: npm run tauri android build --apk
+        run: pnpm tauri android build --apk
         continue-on-error: true
       
       - name: Sign APK (if keystore provided)
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_KEYSTORE == 'true' }}
+        env:
+          HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
           find russh-client -name "*-unsigned.apk" -exec \

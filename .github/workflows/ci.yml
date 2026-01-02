@@ -38,14 +38,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: russh-client/package-lock.json
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       
       - name: Run unit tests
-        run: npm run test:unit
+        run: pnpm test:unit
 
   build-desktop:
     name: Build Desktop (${{ matrix.target }})
@@ -75,18 +78,21 @@ jobs:
         if: contains(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libglib2.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: russh-client/package-lock.json
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       
       - name: Install frontend dependencies
         working-directory: russh-client
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -95,7 +101,7 @@ jobs:
       
       - name: Build Tauri app
         working-directory: russh-client
-        run: npm run tauri build -- --target ${{ matrix.target }}
+        run: pnpm tauri build --target ${{ matrix.target }}
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -121,12 +127,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: russh-client/package-lock.json
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       
       - name: Install frontend dependencies
         working-directory: russh-client
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -135,29 +144,24 @@ jobs:
       
       - name: Initialize iOS project
         working-directory: russh-client
-        run: npm run tauri ios init || true
+        run: pnpm tauri ios init || true
       
       - name: Build iOS app
         working-directory: russh-client
-        run: npm run tauri ios build --release
+        run: pnpm tauri ios build --release
         continue-on-error: true
       
       - name: Build unsigned xcarchive
         working-directory: russh-client/src-tauri/gen/apple
         run: |
-          # Find the Xcode project
           XCODEPROJ=$(find . -name "*.xcodeproj" -type d | head -1)
           if [ -z "$XCODEPROJ" ]; then
-            echo "No .xcodeproj found, checking for workspace..."
             XCWORKSPACE=$(find . -name "*.xcworkspace" -type d | head -1)
           fi
           
-          # List available schemes
           if [ -n "$XCODEPROJ" ]; then
             xcodebuild -list -project "$XCODEPROJ"
             SCHEME=$(xcodebuild -list -project "$XCODEPROJ" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-            
-            # Build unsigned archive
             xcodebuild archive \
               -project "$XCODEPROJ" \
               -scheme "$SCHEME" \
@@ -171,7 +175,6 @@ jobs:
           elif [ -n "$XCWORKSPACE" ]; then
             xcodebuild -list -workspace "$XCWORKSPACE"
             SCHEME=$(xcodebuild -list -workspace "$XCWORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-            
             xcodebuild archive \
               -workspace "$XCWORKSPACE" \
               -scheme "$SCHEME" \
@@ -191,13 +194,7 @@ jobs:
             mv Applications Payload 2>/dev/null || true
             if [ -d "Payload" ]; then
               zip -r "${{ github.workspace }}/RUSSH-unsigned.ipa" Payload
-              echo "IPA created successfully"
-            else
-              echo "No Payload directory found"
-              ls -la
             fi
-          else
-            echo "No xcarchive found"
           fi
       
       - name: Upload iOS artifact
@@ -239,12 +236,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: russh-client/package-lock.json
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       
       - name: Install frontend dependencies
         working-directory: russh-client
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -253,16 +253,12 @@ jobs:
       
       - name: Initialize Android project
         working-directory: russh-client
-        run: npm run tauri android init || true
+        run: pnpm tauri android init || true
       
       - name: Build Android APK
         working-directory: russh-client
-        run: npm run tauri android build --apk
+        run: pnpm tauri android build --apk
         continue-on-error: true
-      
-      - name: Find and upload APK
-        run: |
-          find russh-client -name "*.apk" -type f 2>/dev/null | head -20
       
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
