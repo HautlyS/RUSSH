@@ -1,0 +1,77 @@
+name: 'Tauri-Unsigned-IPA'
+description: 'Build unsigned iOS IPA from Tauri project for Sideloadly'
+author: 'HautlyS'
+
+inputs:
+  working-directory:
+    description: 'Path to Tauri project'
+    default: '.'
+  rust-targets:
+    description: 'Rust targets for iOS'
+    default: 'aarch64-apple-ios,aarch64-apple-ios-sim'
+
+outputs:
+  ipa-path:
+    description: 'Path to the generated IPA'
+    value: ${{ steps.package.outputs.ipa-path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
+    - name: Setup Rust
+      uses: dtolnay/rust-action@stable
+      with:
+        targets: ${{ inputs.rust-targets }}
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: pnpm install
+
+    - name: Init iOS
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: pnpm tauri ios init
+
+    - name: Build & Archive (Unsigned)
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}/src-tauri/gen/apple
+      run: |
+        PROJ=$(find . -maxdepth 1 -name "*.xcworkspace" -type d | head -1)
+        BUILD_TYPE="-workspace"
+        [ -z "$PROJ" ] && { PROJ=$(find . -maxdepth 1 -name "*.xcodeproj" -type d | head -1); BUILD_TYPE="-project"; }
+        SCHEME=$(xcodebuild -list $BUILD_TYPE "$PROJ" 2>/dev/null | awk '/Schemes:/{getline; print; exit}' | xargs)
+        
+        xcodebuild archive $BUILD_TYPE "$PROJ" -scheme "$SCHEME" \
+          -archivePath app.xcarchive \
+          -configuration Release \
+          -destination "generic/platform=iOS" \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+    - name: Package IPA
+      id: package
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}/src-tauri/gen/apple
+      run: |
+        cd app.xcarchive/Products
+        mv Applications Payload
+        zip -r ../unsigned.ipa Payload
+        echo "ipa-path=${{ inputs.working-directory }}/src-tauri/gen/apple/app.xcarchive/Products/unsigned.ipa" >> $GITHUB_OUTPUT
+
+    - name: Upload IPA
+      uses: actions/upload-artifact@v4
+      with:
+        name: unsigned-ipa
+        path: ${{ inputs.working-directory }}/src-tauri/gen/apple/app.xcarchive/Products/unsigned.ipa
