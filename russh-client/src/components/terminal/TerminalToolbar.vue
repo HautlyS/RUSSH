@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Trash2, Search, Settings, Columns, Copy, Download, Maximize2, Terminal } from 'lucide-vue-next';
 import { useVisualEffects } from '@/composables/useVisualEffects';
 import DecryptedText from '@/components/extra/DecryptedText.vue';
@@ -19,12 +19,15 @@ const emit = defineEmits<{
   (e: 'fullscreen'): void;
 }>();
 
-const { isDecryptedTextEnabled, visualEffects } = useVisualEffects();
-
+const { isDecryptedTextEnabled } = useVisualEffects();
 const showSearch = ref(false);
-const searchQuery = ref('');
 
 const displayHostname = computed(() => props.hostname || 'Terminal');
+
+function onSearch() {
+  showSearch.value = !showSearch.value;
+  emit('search');
+}
 </script>
 
 <template>
@@ -56,7 +59,7 @@ const displayHostname = computed(() => props.hostname || 'Terminal');
     </button>
     
     <button
-      @click="showSearch = !showSearch; emit('search')"
+      @click="onSearch"
       class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
       :class="{ 'bg-blue-100 dark:bg-blue-900/30 text-blue-600': showSearch }"
       title="Search (Ctrl+F)"

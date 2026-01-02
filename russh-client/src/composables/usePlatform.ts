@@ -32,17 +32,9 @@ export function usePlatform() {
 
     if (isTauri.value) {
       try {
-        const { platform: tauriPlatform } = await import('@tauri-apps/plugin-os');
-        const os = await tauriPlatform();
-        
-        switch (os) {
-          case 'darwin': platform.value = 'macos'; break;
-          case 'windows': platform.value = 'windows'; break;
-          case 'linux': platform.value = 'linux'; break;
-          case 'ios': platform.value = 'ios'; break;
-          case 'android': platform.value = 'android'; break;
-          default: platform.value = 'unknown';
-        }
+        // Dynamic import for Tauri environment
+        await import('@tauri-apps/api/window');
+        detectFromUserAgent();
       } catch {
         detectFromUserAgent();
       }

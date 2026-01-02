@@ -61,6 +61,7 @@ describe('Connection Store', () => {
         username: 'admin',
         authType: 'password' as const,
         tags: [],
+        autoReconnect: false,
       };
 
       const id = await store.createProfile(profile);
@@ -125,9 +126,9 @@ describe('Connection Store', () => {
   describe('computed properties', () => {
     it('should sort profiles by folder and name', async () => {
       const mockProfiles = [
-        { id: '1', name: 'Zebra', folder: 'B', host: 'a.com', port: 22, username: 'u', authType: 'password', tags: [], useCount: 0 },
-        { id: '2', name: 'Alpha', folder: 'A', host: 'b.com', port: 22, username: 'u', authType: 'password', tags: [], useCount: 0 },
-        { id: '3', name: 'Beta', folder: 'A', host: 'c.com', port: 22, username: 'u', authType: 'password', tags: [], useCount: 0 },
+        { id: '1', name: 'Zebra', folder: 'B', host: 'a.com', port: 22, username: 'u', authType: 'password', tags: [], autoReconnect: false, useCount: 0 },
+        { id: '2', name: 'Alpha', folder: 'A', host: 'b.com', port: 22, username: 'u', authType: 'password', tags: [], autoReconnect: false, useCount: 0 },
+        { id: '3', name: 'Beta', folder: 'A', host: 'c.com', port: 22, username: 'u', authType: 'password', tags: [], autoReconnect: false, useCount: 0 },
       ];
 
       vi.mocked(invoke).mockResolvedValueOnce(mockProfiles);
@@ -143,9 +144,9 @@ describe('Connection Store', () => {
 
     it('should return unique folders', async () => {
       const mockProfiles = [
-        { id: '1', name: 'A', folder: 'Production', host: 'a.com', port: 22, username: 'u', authType: 'password', tags: [], useCount: 0 },
-        { id: '2', name: 'B', folder: 'Development', host: 'b.com', port: 22, username: 'u', authType: 'password', tags: [], useCount: 0 },
-        { id: '3', name: 'C', folder: 'Production', host: 'c.com', port: 22, username: 'u', authType: 'password', tags: [], useCount: 0 },
+        { id: '1', name: 'A', folder: 'Production', host: 'a.com', port: 22, username: 'u', authType: 'password', tags: [], autoReconnect: false, useCount: 0 },
+        { id: '2', name: 'B', folder: 'Development', host: 'b.com', port: 22, username: 'u', authType: 'password', tags: [], autoReconnect: false, useCount: 0 },
+        { id: '3', name: 'C', folder: 'Production', host: 'c.com', port: 22, username: 'u', authType: 'password', tags: [], autoReconnect: false, useCount: 0 },
       ];
 
       vi.mocked(invoke).mockResolvedValueOnce(mockProfiles);

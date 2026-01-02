@@ -1,20 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useTerminal } from '@/composables/useTerminal';
-import { useSettingsStore } from '@/stores/settings';
 import { usePlatform } from '@/composables/usePlatform';
 import { 
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight, 
   CornerDownLeft, Delete, Keyboard, X, Copy, Clipboard
 } from 'lucide-vue-next';
 
-const props = defineProps<{
+defineProps<{
   sessionId: string;
 }>();
 
-const settingsStore = useSettingsStore();
 const { hapticFeedback } = usePlatform();
-const { terminal, initTerminal, sendInput, resize } = useTerminal(props.sessionId);
+const { terminal, initTerminal, write, resize } = useTerminal();
 
 const terminalRef = ref<HTMLDivElement>();
 const showSpecialKeys = ref(true);
@@ -39,7 +37,7 @@ const arrowKeys = [
   { icon: ArrowRight, code: '\x1b[C' },
 ];
 
-function handleSpecialKey(key: typeof specialKeys[0]) {
+function handleSpecialKey(key: { key: string; label: string; code?: string; modifier?: boolean }) {
   hapticFeedback('light');
   
   if (key.modifier) {
@@ -48,28 +46,28 @@ function handleSpecialKey(key: typeof specialKeys[0]) {
     return;
   }
   
-  let code = key.code;
-  if (ctrlActive.value && key.code.length === 1) {
-    code = String.fromCharCode(key.code.charCodeAt(0) & 0x1f);
+  let code = key.code || '';
+  if (ctrlActive.value && code.length === 1) {
+    code = String.fromCharCode(code.charCodeAt(0) & 0x1f);
     ctrlActive.value = false;
   }
   
-  sendInput(code);
+  write(code);
 }
 
 function handleArrowKey(code: string) {
   hapticFeedback('light');
-  sendInput(code);
+  write(code);
 }
 
 function handleEnter() {
   hapticFeedback('medium');
-  sendInput('\r');
+  write('\r');
 }
 
 function handleBackspace() {
   hapticFeedback('light');
-  sendInput('\x7f');
+  write('\x7f');
 }
 
 async function handleCopy() {
@@ -83,7 +81,7 @@ async function handleCopy() {
 async function handlePaste() {
   hapticFeedback('light');
   const text = await navigator.clipboard.readText();
-  if (text) sendInput(text);
+  if (text) write(text);
 }
 
 function toggleKeyboard() {

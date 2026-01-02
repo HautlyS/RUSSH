@@ -55,3 +55,10 @@ clap = { version = "4.4", features = ["derive"] }
 
 # Socket utilities
 socket2 = { version = "0.5", features = ["all"] }
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

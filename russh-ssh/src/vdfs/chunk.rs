@@ -87,9 +87,9 @@ impl ChunkStore {
     /// Returns the chunk ID. If a chunk with the same content already exists,
     /// it won't be duplicated (content-addressed deduplication).
     pub async fn store(&self, chunk: Chunk) -> ChunkId {
-        let id = chunk.id.clone();
+        let id = chunk.id;
         let mut chunks = self.chunks.write().await;
-        chunks.entry(id.clone()).or_insert(chunk);
+        chunks.entry(id).or_insert(chunk);
         id
     }
 

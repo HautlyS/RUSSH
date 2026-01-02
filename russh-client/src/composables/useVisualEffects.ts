@@ -3,7 +3,7 @@
  * Provides reactive access to visual effects settings with reduced motion support
  */
 
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useSettingsStore } from '@/stores/settings';
 import type { VisualEffectsSettings } from '@/types/visualEffects';
 

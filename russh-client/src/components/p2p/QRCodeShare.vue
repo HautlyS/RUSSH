@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { QrCode, Camera, Copy, Check, RefreshCw } from 'lucide-vue-next';
+import { QrCode, Copy, Check, RefreshCw } from 'lucide-vue-next';
 import { useP2P } from '@/composables/useP2P';
 
 const { nodeInfo, generateQRCode, connectToPeer } = useP2P();
@@ -8,7 +8,6 @@ const { nodeInfo, generateQRCode, connectToPeer } = useP2P();
 const qrCodeImage = ref<string>('');
 const isGenerating = ref(false);
 const copied = ref(false);
-const showScanner = ref(false);
 const peerIdInput = ref('');
 
 async function generateQR() {

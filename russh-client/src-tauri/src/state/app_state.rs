@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use super::session_state::{SessionState, SessionInfo, SessionStatus};
+use super::session_state::{SessionState, SessionInfo};
 
 /// Profile data for saved connections
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

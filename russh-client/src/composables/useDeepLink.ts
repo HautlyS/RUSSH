@@ -148,8 +148,8 @@ export function useDeepLink() {
 
     // Check for initial deep link (app opened via URL)
     try {
-      const { getCurrent } = await import('@tauri-apps/api/window');
-      const window = getCurrent();
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      getCurrentWindow();
       // Check if there's a pending URL from app launch
       // This would be set by the native code
     } catch {

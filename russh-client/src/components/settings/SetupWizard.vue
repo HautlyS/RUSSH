@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { useSettingsStore } from '@/stores/settings';
 import { useVisualEffects } from '@/composables/useVisualEffects';
 import Stepper from '@/components/extra/Stepper.vue';
-import { Sun, Moon, Monitor, Palette, Terminal, Bell, Sparkles } from 'lucide-vue-next';
+import { Sun, Moon, Monitor, Terminal, Bell, Sparkles } from 'lucide-vue-next';
 
 const emit = defineEmits<{
   (e: 'complete'): void;

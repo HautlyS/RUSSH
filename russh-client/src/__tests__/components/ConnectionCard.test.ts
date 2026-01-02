@@ -29,6 +29,7 @@ describe('ConnectionCard', () => {
     username: 'testuser',
     authType: 'password',
     tags: ['production', 'web'],
+    autoReconnect: false,
     useCount: 5,
   };
 

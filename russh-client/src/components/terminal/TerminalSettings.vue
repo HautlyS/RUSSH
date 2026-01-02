@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref } from 'vue';
 import { X } from 'lucide-vue-next';
 import { useSettingsStore } from '@/stores/settings';
 import { terminalThemes } from '@/utils/terminalThemes';
 
-const props = defineProps<{
+defineProps<{
   visible: boolean;
 }>();
 
@@ -18,10 +18,14 @@ const settingsStore = useSettingsStore();
 const localSettings = ref({
   fontFamily: settingsStore.settings.terminal.fontFamily,
   fontSize: settingsStore.settings.terminal.fontSize,
+  lineHeight: settingsStore.settings.terminal.lineHeight,
   theme: settingsStore.settings.terminal.theme,
   cursorStyle: settingsStore.settings.terminal.cursorStyle,
   cursorBlink: settingsStore.settings.terminal.cursorBlink,
   scrollback: settingsStore.settings.terminal.scrollback,
+  copyOnSelect: settingsStore.settings.terminal.copyOnSelect,
+  rightClickPaste: settingsStore.settings.terminal.rightClickPaste,
+  bellSound: settingsStore.settings.terminal.bellSound,
 });
 
 const fontFamilies = [
@@ -47,10 +51,14 @@ function resetToDefaults() {
   localSettings.value = {
     fontFamily: 'JetBrains Mono',
     fontSize: 14,
+    lineHeight: 1.2,
     theme: 'dark',
     cursorStyle: 'block',
     cursorBlink: true,
     scrollback: 10000,
+    copyOnSelect: false,
+    rightClickPaste: true,
+    bellSound: false,
   };
 }
 </script>

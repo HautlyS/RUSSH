@@ -3,7 +3,7 @@ import { Monitor, Smartphone, Tablet, X } from 'lucide-vue-next';
 import ConnectionQuality from './ConnectionQuality.vue';
 import type { P2PPeer } from '@/types/p2p';
 
-const props = defineProps<{
+defineProps<{
   peers: P2PPeer[];
 }>();
 

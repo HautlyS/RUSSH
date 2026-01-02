@@ -199,7 +199,7 @@ impl VirtualFs {
         sync.state()
             .get(&normalized)
             .cloned()
-            .ok_or_else(|| VdfsError::NotFound(normalized))
+            .ok_or(VdfsError::NotFound(normalized))
     }
 
     /// Check if a path exists

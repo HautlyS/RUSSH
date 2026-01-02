@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Server, Play, Edit, Trash2, MoreVertical } from 'lucide-vue-next';
+import { Server, Play, Edit, Trash2 } from 'lucide-vue-next';
 import { useConnectionStore } from '@/stores/connections';
 import { useVisualEffects } from '@/composables/useVisualEffects';
 import { usePlatform } from '@/composables/usePlatform';

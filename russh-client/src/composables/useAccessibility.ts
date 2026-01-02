@@ -2,7 +2,7 @@
  * Accessibility composable - provides accessibility utilities
  */
 
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 
 export function useAccessibility() {
   const prefersReducedMotion = ref(false);

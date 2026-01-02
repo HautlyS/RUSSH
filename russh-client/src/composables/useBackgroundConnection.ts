@@ -12,7 +12,7 @@ import { useNotificationStore } from '@/stores/notifications';
 export type AppState = 'active' | 'inactive' | 'background';
 
 export function useBackgroundConnection() {
-  const { isMobile, isTauri } = usePlatform();
+  const { isTauri } = usePlatform();
   const connectionStore = useConnectionStore();
   const notificationStore = useNotificationStore();
   

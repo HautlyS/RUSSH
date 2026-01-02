@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { X, Circle } from 'lucide-vue-next';
 
-const props = defineProps<{
+defineProps<{
   id: string;
   title: string;
   active?: boolean;

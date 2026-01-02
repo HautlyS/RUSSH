@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import type { ConnectionStatus } from '@/types/ssh';
+
 const props = defineProps<{
-  state?: 'connected' | 'connecting' | 'disconnected' | 'error';
+  state?: ConnectionStatus;
   showLabel?: boolean;
 }>();
 
@@ -12,6 +14,8 @@ const statusConfig = computed(() => {
       return { color: 'bg-green-500', label: 'Connected', pulse: false };
     case 'connecting':
       return { color: 'bg-yellow-500', label: 'Connecting', pulse: true };
+    case 'reconnecting':
+      return { color: 'bg-orange-500', label: 'Reconnecting', pulse: true };
     case 'error':
       return { color: 'bg-red-500', label: 'Error', pulse: false };
     default:

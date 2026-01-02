@@ -33,7 +33,7 @@ const parsed = computed(() => {
 
 async function handleConnect() {
   if (!parsed.value.valid) {
-    showError('Invalid connection string. Use format: user@host or user@host:port');
+    showError('Invalid Format', 'Use format: user@host or user@host:port');
     return;
   }
   
@@ -50,7 +50,7 @@ async function handleConnect() {
       emit('connected', sessionId);
     }
   } catch (err) {
-    showError(`Connection failed: ${err}`);
+    showError('Connection Failed', String(err));
   }
 }
 </script>

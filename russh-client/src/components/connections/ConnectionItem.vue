@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useConnectionStore } from '@/stores/connections';
-import { Server, Wifi, WifiOff, MoreVertical } from 'lucide-vue-next';
+import { Server, MoreVertical } from 'lucide-vue-next';
 import type { ConnectionProfile } from '@/types/ssh';
 
 const props = defineProps<{

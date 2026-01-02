@@ -8,7 +8,7 @@
 use clap::{Parser, Subcommand};
 use russh_ssh::session::{SessionManager, SessionProfile};
 use russh_ssh::session::profile::AuthConfig;
-use russh_ssh::ssh::{SshClient, SshConfig, AuthMethod, PortForward, PortForwarder};
+use russh_ssh::ssh::{SshClient, SshConfig, AuthMethod, PortForward, PortForwarder, HostKeyCheck};
 use std::path::PathBuf;
 use std::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -231,6 +231,8 @@ async fn connect(
         username: username.clone(),
         auth,
         timeout: Duration::from_secs(30),
+        known_hosts_path: Some(dirs::home_dir().unwrap_or_default().join(".russh/known_hosts")),
+        host_key_check: HostKeyCheck::AcceptNew,
     };
 
     let mut client = SshClient::new();

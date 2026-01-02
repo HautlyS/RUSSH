@@ -117,8 +117,8 @@ impl SessionManager {
     /// Update a profile
     pub async fn update_profile(&self, profile: SessionProfile) -> Result<(), SessionError> {
         let mut profiles = self.profiles.write().await;
-        if profiles.contains_key(&profile.id) {
-            profiles.insert(profile.id, profile);
+        if let std::collections::hash_map::Entry::Occupied(mut e) = profiles.entry(profile.id) {
+            e.insert(profile);
             Ok(())
         } else {
             Err(SessionError::ProfileNotFound(profile.id.to_string()))

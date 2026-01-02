@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { Home, Server, Terminal, FolderOpen, Settings } from 'lucide-vue-next';
 

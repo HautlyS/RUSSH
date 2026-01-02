@@ -46,15 +46,6 @@ const ungroupedProfiles = computed(() =>
   connectionStore.profiles.filter(p => !p.folder && !p.tags.includes('favorite'))
 );
 
-const filteredProfiles = computed(() => {
-  if (!searchQuery.value) return connectionStore.profiles;
-  const query = searchQuery.value.toLowerCase();
-  return connectionStore.profiles.filter(p => 
-    p.name.toLowerCase().includes(query) ||
-    p.host.toLowerCase().includes(query)
-  );
-});
-
 function getProfilesByFolder(folder: string) {
   return connectionStore.profiles.filter(p => p.folder === folder);
 }

@@ -37,7 +37,26 @@ function updateEffectSetting(effectKey: string, settingKey: string, value: any) 
   }
 }
 
-const effects = computed(() => [
+interface EffectSetting {
+  key: string;
+  label: string;
+  type: string;
+  min: number;
+  max: number;
+  step?: number;
+  value: number;
+}
+
+interface Effect {
+  key: string;
+  name: string;
+  description: string;
+  icon: typeof Sparkles;
+  enabled: boolean;
+  settings: EffectSetting[];
+}
+
+const effects = computed<Effect[]>(() => [
   {
     key: 'clickSpark',
     name: 'Click Sparks',

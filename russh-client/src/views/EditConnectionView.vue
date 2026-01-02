@@ -16,7 +16,7 @@ const profile = computed(() =>
   connectionStore.profiles.find(p => p.id === profileId.value)
 );
 
-async function handleSubmit(updatedProfile: Omit<ConnectionProfile, 'useCount'> & { id?: string }) {
+async function handleSubmit(updatedProfile: Omit<ConnectionProfile, 'id' | 'useCount'> & { id?: string }) {
   try {
     await connectionStore.updateProfile({
       ...updatedProfile,

@@ -1,4 +1,4 @@
-import{d as b,z as R,o as A,a as _,w as T,B as C,e as E}from"./vue-vendor-DVddnRy9.js";import{k as P}from"./index-Cz4xlY7J.js";const z=`
+import{d as b,z as R,o as A,a as _,w as T,B as C,e as E}from"./vue-vendor-CW4dY-Mk.js";import{i as P}from"./index-C_UVHTrk.js";const z=`
 attribute vec2 aPosition;
 void main() {
   gl_Position = vec4(aPosition, 0.0, 1.0);

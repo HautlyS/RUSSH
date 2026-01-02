@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Signal, SignalLow, SignalMedium, SignalHigh } from 'lucide-vue-next';
+import type { P2PConnectionType } from '@/types/p2p';
 
 const props = defineProps<{
   latency?: number;
-  connectionType?: 'direct' | 'relay';
+  connectionType?: P2PConnectionType;
 }>();
 
 const qualityLevel = computed(() => {

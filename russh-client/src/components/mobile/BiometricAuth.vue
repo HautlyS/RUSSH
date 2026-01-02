@@ -15,7 +15,7 @@ const emit = defineEmits<{
   fallback: [];
 }>();
 
-const { isMobile, hapticFeedback } = usePlatform();
+const { hapticFeedback } = usePlatform();
 
 const isAuthenticating = ref(false);
 const error = ref<string | null>(null);

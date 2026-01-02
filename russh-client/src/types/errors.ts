@@ -57,10 +57,10 @@ export function parseBackendError(error: unknown): AppError {
 }
 
 export function isRecoverableError(error: AppError): boolean {
-  const recoverableCodes = [
+  const recoverableCodes: string[] = [
     ErrorCodes.CONNECTION_TIMEOUT,
     ErrorCodes.SESSION_DISCONNECTED,
     ErrorCodes.TRANSFER_FAILED,
   ];
-  return recoverableCodes.includes(error.code as ErrorCode);
+  return recoverableCodes.includes(error.code);
 }

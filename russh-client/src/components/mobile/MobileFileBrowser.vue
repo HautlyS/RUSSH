@@ -4,7 +4,7 @@ import { useFileTransfer } from '@/composables/useFileTransfer';
 import { usePlatform } from '@/composables/usePlatform';
 import { 
   Folder, File, ChevronLeft, RefreshCw, Upload, Download,
-  MoreVertical, Trash2, Edit, Copy, FolderPlus
+  MoreVertical, Trash2, FolderPlus
 } from 'lucide-vue-next';
 import type { FileEntry } from '@/types/files';
 
@@ -14,16 +14,16 @@ const props = defineProps<{
 
 const { hapticFeedback } = usePlatform();
 const { 
-  files, 
-  currentPath, 
   isLoading, 
   listFiles, 
   uploadFile, 
   downloadFile,
   deleteFile,
   createDirectory 
-} = useFileTransfer(props.sessionId);
+} = useFileTransfer();
 
+const files = ref<FileEntry[]>([]);
+const currentPath = ref('/');
 const isRefreshing = ref(false);
 const selectedFile = ref<FileEntry | null>(null);
 const showActions = ref(false);
@@ -38,7 +38,7 @@ function formatSize(bytes: number): string {
 }
 
 // Format date
-function formatDate(date: string): string {
+function formatDate(date: string | number): string {
   return new Date(date).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -50,21 +50,22 @@ function formatDate(date: string): string {
 // Navigate to directory
 async function navigateTo(path: string) {
   hapticFeedback('light');
-  await listFiles(path);
+  currentPath.value = path;
+  files.value = await listFiles(props.sessionId, path);
 }
 
 // Go back
 async function goBack() {
   hapticFeedback('light');
   const parent = currentPath.value.split('/').slice(0, -1).join('/') || '/';
-  await listFiles(parent);
+  await navigateTo(parent);
 }
 
 // Pull to refresh
 async function refresh() {
   isRefreshing.value = true;
   hapticFeedback('light');
-  await listFiles(currentPath.value);
+  files.value = await listFiles(props.sessionId, currentPath.value);
   isRefreshing.value = false;
 }
 
@@ -91,14 +92,14 @@ async function handleDownload() {
   if (!selectedFile.value) return;
   hapticFeedback('light');
   showActions.value = false;
-  await downloadFile(selectedFile.value.path);
+  await downloadFile(props.sessionId, selectedFile.value.path, selectedFile.value.name);
 }
 
 async function handleDelete() {
   if (!selectedFile.value) return;
   hapticFeedback('warning');
   showActions.value = false;
-  await deleteFile(selectedFile.value.path);
+  await deleteFile(props.sessionId, selectedFile.value.path);
   await refresh();
 }
 
@@ -109,10 +110,10 @@ async function handleUpload() {
   input.type = 'file';
   input.multiple = true;
   input.onchange = async (e) => {
-    const files = (e.target as HTMLInputElement).files;
-    if (files) {
-      for (const file of files) {
-        await uploadFile(file, currentPath.value);
+    const fileList = (e.target as HTMLInputElement).files;
+    if (fileList) {
+      for (const file of fileList) {
+        await uploadFile(props.sessionId, currentPath.value, file);
       }
       await refresh();
     }
@@ -124,7 +125,7 @@ async function handleCreateFolder() {
   hapticFeedback('light');
   const name = prompt('Folder name:');
   if (name) {
-    await createDirectory(`${currentPath.value}/${name}`);
+    await createDirectory(props.sessionId, `${currentPath.value}/${name}`);
     await refresh();
   }
 }
@@ -139,8 +140,8 @@ const sortedFiles = computed(() => {
   });
 });
 
-onMounted(() => {
-  listFiles('/');
+onMounted(async () => {
+  files.value = await listFiles(props.sessionId, '/');
 });
 </script>
 
@@ -195,9 +196,9 @@ onMounted(() => {
           <div class="flex-1 min-w-0">
             <div class="font-medium truncate">{{ file.name }}</div>
             <div class="text-xs text-gray-500 flex items-center gap-2">
-              <span>{{ formatSize(file.size) }}</span>
+              <span>{{ formatSize(file.size ?? 0) }}</span>
               <span>•</span>
-              <span>{{ formatDate(file.modified) }}</span>
+              <span>{{ file.modified ? formatDate(file.modified) : '—' }}</span>
             </div>
           </div>
           

@@ -5,8 +5,10 @@ import { useSettingsStore } from '@/stores/settings';
 const settingsStore = useSettingsStore();
 const settings = computed(() => settingsStore.settings);
 
-function updateSetting(key: string, value: any) {
-  settingsStore.updateSettings({ [key]: value });
+function updateGeneralSetting(key: keyof typeof settings.value.general, value: boolean) {
+  settingsStore.updateSettings({ 
+    general: { ...settings.value.general, [key]: value } 
+  });
 }
 </script>
 
@@ -26,11 +28,11 @@ function updateSetting(key: string, value: any) {
           <p class="text-xs text-gray-500 dark:text-gray-400">Start the app minimized to system tray</p>
         </div>
         <button
-          @click="updateSetting('startMinimized', !settings.startMinimized)"
+          @click="updateGeneralSetting('startMinimized', !settings.general.startMinimized)"
           class="relative w-11 h-6 rounded-full transition-colors"
-          :class="settings.startMinimized ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
+          :class="settings.general.startMinimized ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
         >
-          <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="{ 'translate-x-5': settings.startMinimized }" />
+          <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="{ 'translate-x-5': settings.general.startMinimized }" />
         </button>
       </div>
       
@@ -40,11 +42,11 @@ function updateSetting(key: string, value: any) {
           <p class="text-xs text-gray-500 dark:text-gray-400">Automatically connect to last used servers</p>
         </div>
         <button
-          @click="updateSetting('autoConnect', !settings.autoConnect)"
+          @click="updateGeneralSetting('autoConnect', !settings.general.autoConnect)"
           class="relative w-11 h-6 rounded-full transition-colors"
-          :class="settings.autoConnect ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
+          :class="settings.general.autoConnect ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
         >
-          <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="{ 'translate-x-5': settings.autoConnect }" />
+          <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="{ 'translate-x-5': settings.general.autoConnect }" />
         </button>
       </div>
     </section>
@@ -59,11 +61,11 @@ function updateSetting(key: string, value: any) {
           <p class="text-xs text-gray-500 dark:text-gray-400">Automatically check for app updates</p>
         </div>
         <button
-          @click="updateSetting('checkUpdates', !settings.checkUpdates)"
+          @click="updateGeneralSetting('checkUpdates', !settings.general.checkUpdates)"
           class="relative w-11 h-6 rounded-full transition-colors"
-          :class="settings.checkUpdates ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
+          :class="settings.general.checkUpdates ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
         >
-          <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="{ 'translate-x-5': settings.checkUpdates }" />
+          <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="{ 'translate-x-5': settings.general.checkUpdates }" />
         </button>
       </div>
     </section>
@@ -78,11 +80,11 @@ function updateSetting(key: string, value: any) {
           <p class="text-xs text-gray-500 dark:text-gray-400">Show system notifications for events</p>
         </div>
         <button
-          @click="updateSetting('notifications', { ...settings.notifications, enabled: !settings.notifications?.enabled })"
+          @click="settingsStore.updateSettings({ notifications: { ...settings.notifications, enabled: !settings.notifications.enabled } })"
           class="relative w-11 h-6 rounded-full transition-colors"
-          :class="settings.notifications?.enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
+          :class="settings.notifications.enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
         >
-          <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="{ 'translate-x-5': settings.notifications?.enabled }" />
+          <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="{ 'translate-x-5': settings.notifications.enabled }" />
         </button>
       </div>
     </section>

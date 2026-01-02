@@ -1,6 +1,6 @@
 //! Error types for the RUSSH Client
 
-use serde::{Deserialize, Serialize};
+
 use thiserror::Error;
 
 /// Application error type

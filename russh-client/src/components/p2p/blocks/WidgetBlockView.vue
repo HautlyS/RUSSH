@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { Check, X, Send } from 'lucide-vue-next';
-import type { WidgetBlock, WidgetResponse } from '@/types/blocks';
+import type { WidgetBlock } from '@/types/blocks';
 
 const props = defineProps<{
   block: WidgetBlock;

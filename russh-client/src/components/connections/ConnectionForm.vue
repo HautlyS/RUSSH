@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue';
 import { useConnectionStore } from '@/stores/connections';
-import { Server, Key, Lock, Folder, Tag, Palette } from 'lucide-vue-next';
+import { Server, Key, Lock, Folder, Tag } from 'lucide-vue-next';
 import type { ConnectionProfile } from '@/types/ssh';
 
 const props = defineProps<{

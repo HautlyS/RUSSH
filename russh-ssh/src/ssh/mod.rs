@@ -36,6 +36,22 @@ pub struct SshConfig {
     pub auth: AuthMethod,
     /// Connection timeout
     pub timeout: Duration,
+    /// Path to known_hosts file
+    pub known_hosts_path: Option<PathBuf>,
+    /// Host key check policy
+    pub host_key_check: HostKeyCheck,
+}
+
+/// Host key checking policy
+#[derive(Debug, Clone, Default)]
+pub enum HostKeyCheck {
+    /// Strict checking (reject unknown/changed keys)
+    #[default]
+    Strict,
+    /// Accept new keys (add to known_hosts), reject changed
+    AcceptNew,
+    /// No checking (insecure)
+    None,
 }
 
 /// SSH authentication method

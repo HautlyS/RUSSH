@@ -18,7 +18,7 @@ const defaultShortcuts = [
   { id: 'paste', label: 'Paste', default: 'Ctrl+Shift+V' },
 ];
 
-const shortcuts = computed(() => settingsStore.settings.shortcuts || {});
+const shortcuts = computed(() => settingsStore.settings.keyboard.shortcuts || {});
 const editingId = ref<string | null>(null);
 const recordedKeys = ref('');
 
@@ -43,7 +43,10 @@ function recordKey(e: KeyboardEvent) {
 function saveShortcut() {
   if (editingId.value && recordedKeys.value) {
     settingsStore.updateSettings({
-      shortcuts: { ...shortcuts.value, [editingId.value]: recordedKeys.value }
+      keyboard: { 
+        ...settingsStore.settings.keyboard,
+        shortcuts: { ...shortcuts.value, [editingId.value]: recordedKeys.value }
+      }
     });
   }
   cancelRecording();
@@ -59,7 +62,10 @@ function resetShortcut(id: string) {
   const shortcut = defaultShortcuts.find(s => s.id === id);
   if (shortcut) {
     settingsStore.updateSettings({
-      shortcuts: { ...shortcuts.value, [id]: shortcut.default }
+      keyboard: {
+        ...settingsStore.settings.keyboard,
+        shortcuts: { ...shortcuts.value, [id]: shortcut.default }
+      }
     });
   }
 }

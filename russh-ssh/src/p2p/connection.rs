@@ -155,7 +155,7 @@ impl P2PConnection {
 
     /// Check if the connection is still alive
     pub fn is_alive(&self) -> bool {
-        !self.connection.close_reason().is_some()
+        self.connection.close_reason().is_none()
     }
 }
 

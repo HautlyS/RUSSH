@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { Settings, Terminal, Palette, Keyboard, Info, Sparkles } from 'lucide-vue-next';
+import { ref } from 'vue';
+import { Settings, Terminal, Palette, Keyboard, Sparkles } from 'lucide-vue-next';
 import GeneralSettings from './GeneralSettings.vue';
 import TerminalSettingsPanel from './TerminalSettingsPanel.vue';
 import AppearanceSettings from './AppearanceSettings.vue';

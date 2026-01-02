@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { AnimatePresence, Motion, type Target, type Transition, type VariantLabels } from 'motion-v';
+import { AnimatePresence, Motion } from 'motion-v';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 type StaggerFrom = 'first' | 'last' | 'center' | 'random' | number;
 type SplitBy = 'characters' | 'words' | 'lines';
+type Target = Record<string, unknown>;
+type Transition = Record<string, unknown>;
 
 interface WordElement {
   characters: string[];
@@ -13,9 +15,9 @@ interface WordElement {
 interface RotatingTextProps {
   texts: string[];
   transition?: Transition;
-  initial?: boolean | Target | VariantLabels;
-  animate?: Target | VariantLabels;
-  exit?: Target | VariantLabels;
+  initial?: boolean | Target | string;
+  animate?: Target | string;
+  exit?: Target | string;
   animatePresenceMode?: 'sync' | 'wait';
   animatePresenceInitial?: boolean;
   rotationInterval?: number;
