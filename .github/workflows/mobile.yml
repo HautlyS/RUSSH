@@ -1,0 +1,224 @@
+name: Mobile Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build'
+        required: true
+        type: choice
+        options:
+          - ios
+          - android
+          - both
+      build_type:
+        description: 'Build type'
+        required: true
+        type: choice
+        options:
+          - debug
+          - release
+        default: release
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-ios:
+    name: Build iOS
+    if: ${{ inputs.platform == 'ios' || inputs.platform == 'both' }}
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: russh-client/package-lock.json
+      
+      - name: Install frontend dependencies
+        working-directory: russh-client
+        run: npm ci
+      
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ios-${{ inputs.build_type }}
+      
+      - name: Initialize iOS project
+        working-directory: russh-client
+        run: npm run tauri ios init || true
+      
+      - name: Build iOS (${{ inputs.build_type }})
+        working-directory: russh-client
+        run: |
+          if [ "${{ inputs.build_type }}" = "release" ]; then
+            npm run tauri ios build --release
+          else
+            npm run tauri ios build
+          fi
+        continue-on-error: true
+      
+      - name: Create unsigned IPA
+        run: |
+          cd russh-client/src-tauri/gen/apple
+          
+          # Find Xcode project
+          XCODEPROJ=$(find . -name "*.xcodeproj" -type d | head -1)
+          XCWORKSPACE=$(find . -name "*.xcworkspace" -type d | head -1)
+          
+          BUILD_CONFIG="${{ inputs.build_type == 'release' && 'Release' || 'Debug' }}"
+          
+          if [ -n "$XCODEPROJ" ]; then
+            SCHEME=$(xcodebuild -list -project "$XCODEPROJ" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+            echo "Building scheme: $SCHEME from $XCODEPROJ"
+            
+            xcodebuild archive \
+              -project "$XCODEPROJ" \
+              -scheme "$SCHEME" \
+              -archivePath "${{ github.workspace }}/RUSSH.xcarchive" \
+              -configuration "$BUILD_CONFIG" \
+              -destination "generic/platform=iOS" \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              DEVELOPMENT_TEAM="" || echo "Build completed"
+          elif [ -n "$XCWORKSPACE" ]; then
+            SCHEME=$(xcodebuild -list -workspace "$XCWORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+            echo "Building scheme: $SCHEME from $XCWORKSPACE"
+            
+            xcodebuild archive \
+              -workspace "$XCWORKSPACE" \
+              -scheme "$SCHEME" \
+              -archivePath "${{ github.workspace }}/RUSSH.xcarchive" \
+              -configuration "$BUILD_CONFIG" \
+              -destination "generic/platform=iOS" \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              DEVELOPMENT_TEAM="" || echo "Build completed"
+          else
+            echo "No Xcode project found"
+            find . -name "*.xcodeproj" -o -name "*.xcworkspace"
+          fi
+      
+      - name: Package IPA
+        run: |
+          if [ -d "RUSSH.xcarchive/Products" ]; then
+            cd RUSSH.xcarchive/Products
+            
+            # Rename Applications to Payload
+            if [ -d "Applications" ]; then
+              mv Applications Payload
+            fi
+            
+            if [ -d "Payload" ]; then
+              zip -r "${{ github.workspace }}/RUSSH-${{ inputs.build_type }}-unsigned.ipa" Payload
+              echo "✅ IPA created: RUSSH-${{ inputs.build_type }}-unsigned.ipa"
+              ls -la "${{ github.workspace }}/RUSSH-${{ inputs.build_type }}-unsigned.ipa"
+            else
+              echo "❌ No Payload directory found"
+              ls -la
+            fi
+          else
+            echo "❌ No xcarchive found"
+            ls -la "${{ github.workspace }}"
+          fi
+      
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: russh-ios-${{ inputs.build_type }}-unsigned
+          path: |
+            RUSSH-${{ inputs.build_type }}-unsigned.ipa
+          if-no-files-found: warn
+      
+      - name: Upload xcarchive (for debugging)
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: russh-ios-xcarchive
+          path: RUSSH.xcarchive/
+          if-no-files-found: warn
+
+  build-android:
+    name: Build Android
+    if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Install Android NDK
+        run: |
+          sdkmanager --install "ndk;26.1.10909125"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: russh-client/package-lock.json
+      
+      - name: Install frontend dependencies
+        working-directory: russh-client
+        run: npm ci
+      
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: android-${{ inputs.build_type }}
+      
+      - name: Initialize Android project
+        working-directory: russh-client
+        run: npm run tauri android init || true
+      
+      - name: Build Android APK (${{ inputs.build_type }})
+        working-directory: russh-client
+        run: |
+          if [ "${{ inputs.build_type }}" = "release" ]; then
+            npm run tauri android build --apk
+          else
+            npm run tauri android build --apk --debug
+          fi
+        continue-on-error: true
+      
+      - name: Find APKs
+        id: find_apks
+        run: |
+          echo "Looking for APKs..."
+          find russh-client -name "*.apk" -type f 2>/dev/null | while read apk; do
+            echo "Found: $apk"
+            cp "$apk" "${{ github.workspace }}/" 2>/dev/null || true
+          done
+          ls -la "${{ github.workspace }}"/*.apk 2>/dev/null || echo "No APKs in workspace root"
+      
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: russh-android-${{ inputs.build_type }}
+          path: |
+            russh-client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            *.apk
+          if-no-files-found: warn

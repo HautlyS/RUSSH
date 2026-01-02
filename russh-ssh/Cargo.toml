@@ -1,0 +1,32 @@
+[package]
+name = "russh-ssh"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "A secure, efficient russh SSH library with P2P networking and end-to-end encryption"
+
+[dependencies]
+tokio.workspace = true
+iroh.workspace = true
+ring.workspace = true
+blake3.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+rand.workspace = true
+tracing.workspace = true
+async-ssh2-tokio.workspace = true
+socket2.workspace = true
+base64 = "0.22"
+hex = "0.4"
+
+[dev-dependencies]
+proptest.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3.10"

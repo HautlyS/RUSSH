@@ -1,0 +1,135 @@
+    Checking russh-ssh v0.1.0 (/home/hautly/RUSSH/russh-ssh)
+error[E0432]: unresolved import `command::CommandResult`
+  --> russh-ssh/src/ssh/mod.rs:20:9
+   |
+20 | pub use command::CommandResult;
+   |         ^^^^^^^^^^^^^^^^^^^^^^ no `CommandResult` in `ssh::command`
+
+error[E0425]: cannot find value `client` in this scope
+  --> russh-ssh/src/ssh/client.rs:69:28
+   |
+69 |         self.client = Some(client);
+   |                            ^^^^^^
+   |
+help: you might have meant to use the available field
+   |
+69 |         self.client = Some(self.client);
+   |                            +++++
+
+error[E0412]: cannot find type `CommandResult` in this scope
+  --> russh-ssh/src/ssh/command.rs:26:58
+   |
+26 |     pub async fn execute(&self, command: &str) -> Result<CommandResult, SshError> {
+   |                                                          ^^^^^^^^^^^^^ not found in this scope
+   |
+help: you might be missing a type parameter
+   |
+24 | impl<CommandResult> SshClient {
+   |     +++++++++++++++
+
+error[E0422]: cannot find struct, variant or union type `CommandResult` in this scope
+  --> russh-ssh/src/ssh/command.rs:34:12
+   |
+34 |         Ok(CommandResult {
+   |            ^^^^^^^^^^^^^ not found in this scope
+
+warning: unused import: `AuthMethod`
+ --> russh-ssh/src/ssh/client.rs:5:24
+  |
+5 | use super::{SshConfig, AuthMethod};
+  |                        ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `tokio::net::TcpStream`
+  --> russh-ssh/src/ssh/client.rs:10:5
+   |
+10 | use tokio::net::TcpStream;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::time::Duration`
+ --> russh-ssh/src/ssh/command.rs:7:5
+  |
+7 | use std::time::Duration;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `SshConfig`
+ --> russh-ssh/src/ssh/forward.rs:5:24
+  |
+5 | use super::{SshClient, SshConfig};
+  |                        ^^^^^^^^^
+
+warning: unused variable: `client`
+  --> russh-ssh/src/ssh/client.rs:81:21
+   |
+81 |         if let Some(client) = self.client.take() {
+   |                     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_client`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `term`
+  --> russh-ssh/src/ssh/command.rs:57:36
+   |
+57 |     pub async fn open_shell(&self, term: &str, cols: u32, rows: u32) -> Result<Shell, SshError> {
+   |                                    ^^^^ help: if this is intentional, prefix it with an underscore: `_term`
+
+warning: unused variable: `cols`
+  --> russh-ssh/src/ssh/command.rs:57:48
+   |
+57 |     pub async fn open_shell(&self, term: &str, cols: u32, rows: u32) -> Result<Shell, SshError> {
+   |                                                ^^^^
+   |
+help: if this is intentional, prefix it with an underscore
+   |
+57 |     pub async fn open_shell(&self, term: &str, _cols: u32, rows: u32) -> Result<Shell, SshError> {
+   |                                                +
+help: you might have meant to pattern match on the similarly named constant `BRANCHES`
+   |
+57 -     pub async fn open_shell(&self, term: &str, cols: u32, rows: u32) -> Result<Shell, SshError> {
+57 +     pub async fn open_shell(&self, term: &str, connection::reconnection::ReconnectionController::reconnect::{closure#0}::BRANCHES: u32, rows: u32) -> Result<Shell, SshError> {
+   |
+
+warning: unused variable: `rows`
+  --> russh-ssh/src/ssh/command.rs:57:59
+   |
+57 |     pub async fn open_shell(&self, term: &str, cols: u32, rows: u32) -> Result<Shell, SshError> {
+   |                                                           ^^^^
+   |
+help: if this is intentional, prefix it with an underscore
+   |
+57 |     pub async fn open_shell(&self, term: &str, cols: u32, _rows: u32) -> Result<Shell, SshError> {
+   |                                                           +
+help: you might have meant to pattern match on the similarly named constant `BRANCHES`
+   |
+57 -     pub async fn open_shell(&self, term: &str, cols: u32, rows: u32) -> Result<Shell, SshError> {
+57 +     pub async fn open_shell(&self, term: &str, cols: u32, connection::reconnection::ReconnectionController::reconnect::{closure#0}::BRANCHES: u32) -> Result<Shell, SshError> {
+   |
+
+warning: unused variable: `client`
+  --> russh-ssh/src/ssh/command.rs:58:13
+   |
+58 |         let client = self.inner().ok_or(SshError::NotConnected)?;
+   |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_client`
+
+warning: unused import: `AsyncWriteExt`
+  --> russh-ssh/src/ssh/forward.rs:12:31
+   |
+12 | use tokio::io::{AsyncReadExt, AsyncWriteExt};
+   |                               ^^^^^^^^^^^^^
+
+warning: unused import: `AsyncReadExt`
+  --> russh-ssh/src/ssh/forward.rs:12:17
+   |
+12 | use tokio::io::{AsyncReadExt, AsyncWriteExt};
+   |                 ^^^^^^^^^^^^
+
+warning: unused variable: `handle_clone`
+  --> russh-ssh/src/ssh/forward.rs:77:13
+   |
+77 |         let handle_clone = handle.clone();
+   |             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_handle_clone`
+
+Some errors have detailed explanations: E0412, E0422, E0425, E0432.
+For more information about an error, try `rustc --explain E0412`.
+warning: `russh-ssh` (lib) generated 12 warnings
+error: could not compile `russh-ssh` (lib) due to 4 previous errors; 12 warnings emitted

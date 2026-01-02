@@ -1,0 +1,693 @@
+# Implementation Plan: RUSSH Cross-Device SSH Client
+
+## Overview
+
+This implementation plan breaks down the Tauri + Vue.js SSH client into incremental tasks. The implementation follows a layered approach: project setup → backend commands → frontend stores → components → mobile adaptation → testing → deployment.
+
+## Tasks
+
+- [x] 1. Project Setup and Configuration
+  - [x] 1.1 Initialize Tauri 2.0 project with Vue.js template
+    - Run `npm create tauri-app@latest russh-client -- --template vue-ts`
+    - Configure Vite for Vue 3 + TypeScript
+    - _Requirements: 2.1_
+  - [x] 1.2 Configure Tailwind CSS
+    - Install tailwindcss, postcss, autoprefixer
+    - Create tailwind.config.js with dark mode support
+    - Set up base styles in main.css
+    - _Requirements: 6.4_
+  - [x] 1.3 Set up project structure
+    - Create directory structure as per design document
+    - Configure path aliases in tsconfig.json and vite.config.ts
+    - _Requirements: 2.2_
+  - [x] 1.4 Add russh-ssh dependency to Tauri backend
+    - Update src-tauri/Cargo.toml with russh-ssh dependency
+    - Configure workspace if needed
+    - _Requirements: 1.1_
+  - [x] 1.5 Install frontend dependencies
+    - Install: pinia, vue-router, xterm, xterm-addon-fit, xterm-addon-webgl
+    - Install: lucide-vue-next (icons), @vueuse/core
+    - Install Tauri plugins: @tauri-apps/plugin-dialog, @tauri-apps/plugin-notification
+    - _Requirements: 2.1, 4.1_
+
+- [x] 2. Checkpoint - Project scaffolding complete
+  - Verify project builds and runs on desktop
+  - Ensure Tauri dev server starts correctly
+
+- [x] 3. Tauri Backend Commands - SSH
+  - [x] 3.1 Implement AppState struct
+    - Create state/app_state.rs with session management
+    - Implement thread-safe session storage with RwLock
+    - _Requirements: 1.1, 1.3_
+  - [x] 3.2 Implement SSH connection commands
+    - Create commands/ssh.rs with ssh_connect, ssh_disconnect
+    - Implement ConnectionRequest/ConnectionResponse types
+    - Wire to russh-ssh SshClient
+    - _Requirements: 1.1, 1.2, 1.4_
+  - [x] 3.3 Implement command execution
+    - Add ssh_execute command with timeout support
+    - Implement streaming output via Tauri events
+    - _Requirements: 9.1, 9.2, 9.3_
+  - [x] 3.4 Implement terminal PTY commands
+    - Add terminal_start, terminal_input, terminal_resize commands
+    - Set up bidirectional event streaming for terminal I/O
+    - _Requirements: 4.1, 4.2, 4.4_
+
+- [x] 4. Tauri Backend Commands - Profiles
+  - [x] 4.1 Implement profile storage
+    - Create commands/profiles.rs
+    - Implement profile_create, profile_update, profile_delete, profile_list
+    - Store profiles in app data directory
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.2 Implement profile import/export
+    - Add profile_export, profile_import commands
+    - Support credential exclusion option
+    - _Requirements: 8.4, 8.5_
+  - [ ]* 4.3 Write property test for profile serialization round-trip
+    - **Property 1: Profile Serialization Round-Trip**
+    - **Validates: Requirements 3.8**
+
+- [x] 5. Tauri Backend Commands - Files
+  - [x] 5.1 Implement file listing
+    - Create commands/files.rs
+    - Add file_list command returning FileEntry array
+    - _Requirements: 5.1, 5.2_
+  - [x] 5.2 Implement file transfer commands
+    - Add file_upload, file_download with progress events
+    - Implement transfer cancellation
+    - _Requirements: 5.3, 5.4, 5.5, 5.6_
+  - [x] 5.3 Implement file operations
+    - Add file_delete, file_rename, file_mkdir, file_chmod
+    - _Requirements: 5.7, 5.8_
+
+- [x] 6. Tauri Backend Commands - P2P
+  - [x] 6.1 Implement P2P endpoint management
+    - Create commands/p2p.rs
+    - Add p2p_get_node_info, p2p_connect, p2p_disconnect
+    - Wire to russh-ssh P2PEndpoint
+    - _Requirements: 10.1, 10.2, 10.3_
+  - [x] 6.2 Implement QR code generation
+    - Add p2p_generate_qr command
+    - Generate base64 QR code image with node ID
+    - _Requirements: 10.6_
+
+- [x] 7. Tauri Backend Commands - Settings
+  - [x] 7.1 Implement settings persistence
+    - Create commands/settings.rs
+    - Add settings_load, settings_save commands
+    - Store in app config directory
+    - _Requirements: 8.1, 8.2, 8.3_
+  - [ ]* 7.2 Write property test for settings round-trip
+    - **Property 2: Settings Serialization Round-Trip**
+    - **Validates: Requirements 8.7**
+
+- [x] 8. Checkpoint - Backend commands complete
+  - Test all commands via Tauri invoke
+  - Verify error handling returns structured errors
+
+- [x] 9. Frontend TypeScript Types
+  - [x] 9.1 Create SSH types
+    - Define ConnectionProfile, ConnectionState, CommandResult interfaces
+    - Create types/ssh.ts
+    - _Requirements: 3.1_
+  - [x] 9.2 Create file types
+    - Define FileEntry, TransferItem interfaces
+    - Create types/files.ts
+    - _Requirements: 5.1_
+  - [x] 9.3 Create settings types
+    - Define AppSettings and sub-interfaces
+    - Create types/settings.ts
+    - _Requirements: 8.1_
+  - [x] 9.4 Create P2P types
+    - Define P2PNodeInfo, P2PPeer interfaces
+    - Create types/p2p.ts
+    - _Requirements: 10.1_
+
+- [x] 10. Frontend Pinia Stores
+  - [x] 10.1 Implement connections store
+    - Create stores/connections.ts
+    - Implement profile CRUD, connect/disconnect actions
+    - Add computed getters for sorted/filtered profiles
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+  - [x] 10.2 Implement terminals store
+    - Create stores/terminals.ts
+    - Implement tab management (create, close, switch)
+    - _Requirements: 4.7_
+  - [x] 10.3 Implement settings store
+    - Create stores/settings.ts
+    - Implement load, save, update, reset actions
+    - Auto-save on changes
+    - _Requirements: 8.1, 8.2, 8.3, 8.6_
+  - [x] 10.4 Implement notifications store
+    - Create stores/notifications.ts
+    - Implement add, markRead, clear actions
+    - Track unread count
+    - _Requirements: 7.1, 7.6_
+
+- [-] 11. Frontend Composables
+  - [x] 11.1 Implement useSSH composable
+    - Create composables/useSSH.ts
+    - Wrap Tauri invoke calls for SSH operations
+    - Handle errors and notifications
+    - _Requirements: 1.1, 9.1_
+  - [x] 11.2 Implement useTerminal composable
+    - Create composables/useTerminal.ts
+    - Initialize xterm.js with addons
+    - Handle input/output via Tauri events
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6_
+  - [x] 11.3 Implement useFileTransfer composable
+    - Create composables/useFileTransfer.ts
+    - Handle file listing, upload, download
+    - Track transfer progress
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
+  - [x] 11.4 Implement useP2P composable
+    - Create composables/useP2P.ts
+    - Handle P2P connection and status
+    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+  - [x] 11.5 Implement useTheme composable
+    - Create composables/useTheme.ts
+    - Handle theme switching and system detection
+    - Apply CSS variables
+    - _Requirements: 6.1, 6.2, 6.3_
+  - [x] 11.6 Implement useKeyboard composable
+    - Create composables/useKeyboard.ts
+    - Register global keyboard shortcuts
+    - Handle shortcut conflicts
+    - _Requirements: 9.1, 9.2, 9.4_
+  - [x] 11.7 Implement useNotification composable
+    - Create composables/useNotification.ts
+    - Handle in-app and system notifications
+    - _Requirements: 7.1, 7.2, 7.3, 7.5_
+
+- [x] 12. Checkpoint - Stores and composables complete
+  - Verify reactive state updates
+  - Test composable functionality in isolation
+
+- [x] 13. Common Components
+  - [x] 13.1 Implement AppHeader component
+    - Create components/common/AppHeader.vue
+    - Include logo, search trigger, notifications, settings
+    - Handle window drag region
+    - _Requirements: 2.1_
+  - [x] 13.2 Implement AppSidebar component
+    - Create components/common/AppSidebar.vue
+    - Display connection list with folders
+    - Support collapsed state
+    - _Requirements: 3.5, 3.6_
+  - [x] 13.3 Implement CommandPalette component
+    - Create components/common/CommandPalette.vue
+    - Fuzzy search across actions and connections
+    - Keyboard navigation
+    - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
+  - [x] 13.4 Implement NotificationToast component
+    - Create components/common/NotificationToast.vue
+    - Display toast notifications with auto-dismiss
+    - Support action buttons
+    - _Requirements: 7.1, 7.2, 7.3_
+  - [x] 13.5 Implement LoadingSpinner component
+    - Create components/common/LoadingSpinner.vue
+    - Reusable loading indicator
+    - _Requirements: 2.1_
+  - [x] 13.6 Implement ContextMenu component
+    - Create components/common/ContextMenu.vue
+    - Positioned context menu with keyboard support
+    - _Requirements: 2.1_
+
+- [x] 14. Connection Components
+  - [x] 14.1 Implement ConnectionList component
+    - Create components/connections/ConnectionList.vue
+    - Display profiles with status indicators
+    - Support drag-and-drop reordering
+    - _Requirements: 3.4, 3.6_
+  - [x] 14.2 Implement ConnectionCard component
+    - Create components/connections/ConnectionCard.vue
+    - Show profile info, status, quick actions
+    - _Requirements: 3.4, 3.7_
+  - [x] 14.3 Implement ConnectionForm component
+    - Create components/connections/ConnectionForm.vue
+    - Full form with validation
+    - Support create and edit modes
+    - _Requirements: 3.2, 3.3_
+  - [x] 14.4 Implement ConnectionStatus component
+    - Create components/connections/ConnectionStatus.vue
+    - Real-time status indicator
+    - _Requirements: 3.4_
+  - [x] 14.5 Implement QuickConnect component
+    - Create components/connections/QuickConnect.vue
+    - Minimal form for one-time connections
+    - _Requirements: 3.2_
+
+- [x] 15. Terminal Components
+  - [x] 15.1 Implement TerminalContainer component
+    - Create components/terminal/TerminalContainer.vue
+    - Tab bar, toolbar, terminal area
+    - Handle resize
+    - _Requirements: 4.1, 4.4, 4.7_
+  - [x] 15.2 Implement TerminalTab component
+    - Create components/terminal/TerminalTab.vue
+    - Tab with title, close button
+    - _Requirements: 4.7_
+  - [x] 15.3 Implement TerminalToolbar component
+    - Create components/terminal/TerminalToolbar.vue
+    - Actions: clear, search, settings, split
+    - _Requirements: 4.1_
+  - [x] 15.4 Implement TerminalSettings component
+    - Create components/terminal/TerminalSettings.vue
+    - Font, colors, behavior settings
+    - _Requirements: 4.1_
+
+- [x] 16. File Browser Components
+  - [x] 16.1 Implement FileBrowser component
+    - Create components/files/FileBrowser.vue
+    - Dual-pane view with toolbar
+    - _Requirements: 5.1, 5.2_
+  - [x] 16.2 Implement FileTree component
+    - Create components/files/FileTree.vue
+    - Hierarchical tree view
+    - _Requirements: 5.1_
+  - [x] 16.3 Implement FileList component
+    - Create components/files/FileList.vue
+    - List view with columns
+    - Drag-and-drop support
+    - _Requirements: 5.1, 5.3, 5.4, 5.8_
+  - [x] 16.4 Implement FileTransferQueue component
+    - Create components/files/FileTransferQueue.vue
+    - Show active/completed transfers
+    - Progress bars, cancel buttons
+    - _Requirements: 5.5, 5.6_
+  - [x] 16.5 Implement FileContextMenu component
+    - Create components/files/FileContextMenu.vue
+    - File operations menu
+    - _Requirements: 5.7_
+
+- [x] 17. P2P Components
+  - [x] 17.1 Implement P2PStatus component
+    - Create components/p2p/P2PStatus.vue
+    - Show online status, node ID
+    - _Requirements: 10.1, 10.2_
+  - [x] 17.2 Implement PeerList component
+    - Create components/p2p/PeerList.vue
+    - List connected peers with quality
+    - _Requirements: 10.3, 10.4_
+  - [x] 17.3 Implement QRCodeShare component
+    - Create components/p2p/QRCodeShare.vue
+    - Display/scan QR codes
+    - _Requirements: 10.6_
+  - [x] 17.4 Implement ConnectionQuality component
+    - Create components/p2p/ConnectionQuality.vue
+    - Latency, connection type indicator
+    - _Requirements: 10.4_
+
+- [x] 18. Settings Components
+  - [x] 18.1 Implement SettingsPanel component
+    - Create components/settings/SettingsPanel.vue
+    - Sidebar navigation, content area
+    - _Requirements: 8.1_
+  - [x] 18.2 Implement GeneralSettings component
+    - Create components/settings/GeneralSettings.vue
+    - Startup, updates, language
+    - _Requirements: 8.1_
+  - [x] 18.3 Implement TerminalSettings component
+    - Create components/settings/TerminalSettings.vue
+    - Font, colors, behavior
+    - _Requirements: 8.1_
+  - [x] 18.4 Implement AppearanceSettings component
+    - Create components/settings/AppearanceSettings.vue
+    - Theme, accent color, layout
+    - _Requirements: 8.1, 6.1, 6.5, 6.6_
+  - [x] 18.5 Implement KeyboardSettings component
+    - Create components/settings/KeyboardSettings.vue
+    - Shortcut customization
+    - _Requirements: 8.1, 9.1, 9.6_
+
+- [x] 19. Checkpoint - Desktop components complete
+  - Verify all components render correctly
+  - Test component interactions
+
+- [x] 20. Views and Routing
+  - [x] 20.1 Set up Vue Router
+    - Create router/index.ts
+    - Define routes for all views
+    - Implement navigation guards
+    - _Requirements: 2.2_
+  - [x] 20.2 Implement DashboardView
+    - Create views/DashboardView.vue
+    - Recent connections, quick actions, stats
+    - _Requirements: 2.1_
+  - [x] 20.3 Implement ConnectionsView
+    - Create views/ConnectionsView.vue
+    - Connection list with create/edit
+    - _Requirements: 3.1_
+  - [x] 20.4 Implement TerminalView
+    - Create views/TerminalView.vue
+    - Full terminal interface
+    - _Requirements: 4.1_
+  - [x] 20.5 Implement FilesView
+    - Create views/FilesView.vue
+    - File browser interface
+    - _Requirements: 5.1_
+  - [x] 20.6 Implement SettingsView
+    - Create views/SettingsView.vue
+    - Settings panel
+    - _Requirements: 8.1_
+
+- [x] 21. App Layout and Integration
+  - [x] 21.1 Implement App.vue layout
+    - Header, sidebar, main content area
+    - Notification container
+    - Command palette
+    - _Requirements: 2.1, 2.2_
+  - [x] 21.2 Wire up global keyboard shortcuts
+    - Initialize useKeyboard in App.vue
+    - _Requirements: 9.1_
+  - [x] 21.3 Initialize stores on app mount
+    - Load settings, profiles on startup
+    - _Requirements: 3.1, 8.1_
+  - [x] 21.4 Set up Tauri event listeners
+    - Listen for connection state changes
+    - Listen for transfer progress
+    - _Requirements: 1.3, 5.5_
+
+- [x] 22. Checkpoint - Desktop app functional
+  - Full end-to-end testing on desktop
+  - Verify all features work together
+
+- [x] 23. Mobile Platform Setup
+  - [x] 23.1 Configure Tauri for iOS
+    - Run `npm run tauri ios init`
+    - Configure bundle identifier, team ID
+    - Set minimum iOS version to 13.0
+    - _Requirements: 7.1_
+  - [x] 23.2 Configure Tauri for Android
+    - Run `npm run tauri android init`
+    - Configure package name, SDK versions
+    - Set minSdkVersion to 24
+    - _Requirements: 7.1_
+  - [x] 23.3 Add mobile-specific Tauri plugins
+    - Install @tauri-apps/plugin-biometric
+    - Install @tauri-apps/plugin-haptics
+    - Configure plugin permissions
+    - _Requirements: 13.1_
+
+- [x] 24. Mobile-Specific Components
+  - [x] 24.1 Implement MobileNavigation component
+    - Create components/mobile/MobileNavigation.vue
+    - Bottom tab bar with safe area
+    - Haptic feedback on tap
+    - _Requirements: 2.1_
+  - [x] 24.2 Implement MobileTerminal component
+    - Create components/mobile/MobileTerminal.vue
+    - Touch-optimized terminal
+    - Quick action toolbar
+    - Special keys row
+    - _Requirements: 4.1_
+  - [x] 24.3 Implement BiometricAuth component
+    - Create components/mobile/BiometricAuth.vue
+    - Face ID / Touch ID / Fingerprint
+    - Fallback to password
+    - _Requirements: 13.1_
+  - [x] 24.4 Implement MobileFileBrowser component
+    - Create components/mobile/MobileFileBrowser.vue
+    - Single-pane optimized view
+    - Pull-to-refresh
+    - _Requirements: 5.1_
+  - [x] 24.5 Implement MobileConnectionCard component
+    - Create components/mobile/MobileConnectionCard.vue
+    - Touch-friendly card design
+    - Swipe actions
+    - _Requirements: 3.4_
+
+- [x] 25. Mobile Layout Adaptation
+  - [x] 25.1 Create mobile-specific App layout
+    - Detect platform using Tauri API
+    - Conditionally render mobile navigation
+    - Handle safe areas
+    - _Requirements: 2.1_
+  - [x] 25.2 Implement responsive breakpoints
+    - Configure Tailwind for mobile breakpoints
+    - Add mobile-specific utility classes
+    - _Requirements: 2.1_
+  - [x] 25.3 Handle mobile keyboard
+    - Adjust layout when keyboard appears
+    - Scroll to focused input
+    - _Requirements: 4.1_
+  - [x] 25.4 Implement gesture handling
+    - Swipe navigation
+    - Pull-to-refresh
+    - Pinch-to-zoom in terminal
+    - _Requirements: 4.1_
+
+- [x] 26. Mobile-Specific Features
+  - [x] 26.1 Implement biometric authentication flow
+    - Protect sensitive operations
+    - Store credentials securely
+    - _Requirements: 13.1_
+  - [x] 26.2 Implement share extension (iOS)
+    - Share node ID via system share sheet
+    - _Requirements: 10.6_
+  - [x] 26.3 Implement deep linking
+    - Handle russh:// URL scheme
+    - Quick connect from links
+    - _Requirements: 3.5_
+  - [x] 26.4 Implement background connection handling
+    - Keep connections alive in background
+    - Handle app lifecycle events
+    - _Requirements: 1.5_
+
+- [x] 27. Checkpoint - Mobile apps functional
+  - Test on iOS simulator and device
+  - Test on Android emulator and device
+  - Verify touch interactions
+
+- [x] 28. Accessibility Implementation
+  - [x] 28.1 Add ARIA labels to all components
+    - Label interactive elements
+    - Describe dynamic content
+    - _Requirements: 13.1, 13.2_
+  - [x] 28.2 Implement keyboard navigation
+    - Tab order for all interactive elements
+    - Focus management
+    - _Requirements: 13.2, 13.3_
+  - [x] 28.3 Add screen reader support
+    - Announce state changes
+    - Describe terminal output
+    - _Requirements: 13.4, 13.6_
+  - [x] 28.4 Verify contrast ratios
+    - Check all color combinations
+    - Ensure WCAG 2.1 AA compliance
+    - _Requirements: 13.5_
+
+- [x] 29. Testing
+  - [x] 29.1 Write unit tests for stores
+    - Test all store actions and getters
+    - Mock Tauri invoke calls
+    - _Requirements: 2.1_
+  - [x] 29.2 Write component tests
+    - Test component rendering
+    - Test user interactions
+    - _Requirements: 2.1_
+  - [x] 29.3 Write E2E tests with Playwright
+    - Test critical user flows
+    - Test error scenarios
+    - _Requirements: 2.1_
+  - [ ]* 29.4 Write property tests for frontend
+    - **Property 3: IPC Command Response Consistency**
+    - **Validates: Requirements 1.4, 1.5**
+
+- [x] 30. Performance Optimization
+  - [x] 30.1 Implement lazy loading
+    - Lazy load route components
+    - Lazy load heavy dependencies (xterm)
+    - _Requirements: 2.6_
+  - [x] 30.2 Optimize terminal rendering
+    - Use WebGL renderer when available
+    - Limit scrollback buffer
+    - _Requirements: 4.1_
+  - [x] 30.3 Optimize file browser
+    - Virtual scrolling for large directories
+    - Debounce search input
+    - _Requirements: 5.2_
+  - [x] 30.4 Bundle optimization
+    - Analyze bundle size
+    - Tree-shake unused code
+    - _Requirements: 2.1_
+
+- [x] 31. Deployment Preparation
+  - [x] 31.1 Configure auto-updater
+    - Set up update server endpoints
+    - Generate signing keys
+    - _Requirements: 8.1_
+  - [x] 31.2 Create app icons
+    - Generate icons for all platforms
+    - Include app store assets
+    - _Requirements: 2.1_
+  - [x] 31.3 Write release documentation
+    - Create README.md
+    - Document build process
+    - _Requirements: 2.1_
+  - [x] 31.4 Set up CI/CD
+    - GitHub Actions for builds
+    - Automated testing
+    - _Requirements: 2.1_
+
+- [x] 32. Visual Effects Integration - Setup
+  - [x] 32.1 Install visual effects dependencies
+    - Install gsap for FlowingMenu animations
+    - Install motion-v for RotatingText animations
+    - Install mathjs for GradualBlur calculations
+    - _Requirements: 2.1_
+  - [x] 32.2 Create visual effects types
+    - Create types/visualEffects.ts with VisualEffectsSettings interface
+    - Define settings for each effect component
+    - _Requirements: 8.1_
+  - [x] 32.3 Add visual effects to settings store
+    - Extend stores/settings.ts with visualEffects section
+    - Add load/save/update actions for visual effects
+    - Implement reduced motion detection
+    - _Requirements: 8.1, 13.1_
+  - [x] 32.4 Create useVisualEffects composable
+    - Create composables/useVisualEffects.ts
+    - Handle reduced motion preference
+    - Provide reactive effect settings
+    - _Requirements: 6.1, 13.1_
+
+- [x] 33. Visual Effects Integration - Global Effects
+  - [x] 33.1 Integrate ClickSpark in App.vue
+    - Wrap main content with ClickSpark component
+    - Configure spark color from theme accent
+    - Respect reduced motion setting
+    - _Requirements: 2.1_
+  - [x] 33.2 Integrate Noise overlay in App.vue
+    - Add Noise component as fixed overlay
+    - Configure subtle alpha (5-10)
+    - Add toggle in visual effects settings
+    - _Requirements: 2.1_
+  - [x] 33.3 Add visual effects settings panel
+    - Create components/settings/VisualEffectsSettings.vue
+    - Add toggles for each effect category
+    - Add intensity/color customization
+    - _Requirements: 8.1_
+
+- [x] 34. Visual Effects Integration - Dashboard
+  - [x] 34.1 Add DecryptedText to welcome heading
+    - Replace "Welcome to RUSSH" with DecryptedText
+    - Configure animateOn: "view", sequential: true
+    - Use theme-aware colors
+    - _Requirements: 2.1_
+  - [x] 34.2 Add RotatingText for status messages
+    - Add rotating tips below welcome message
+    - Configure 3-second rotation interval
+    - _Requirements: 2.1_
+  - [x] 34.3 Add ElectricBorder to quick action cards
+    - Wrap "New Connection" and "P2P" cards with ElectricBorder
+    - Use accent green color (#27FF64)
+    - Configure subtle animation (speed: 0.8, chaos: 0.3)
+    - _Requirements: 2.1_
+
+- [x] 35. Visual Effects Integration - Connections
+  - [x] 35.1 Add Magnet effect to ConnectionCard
+    - Wrap ConnectionCard content with Magnet
+    - Configure padding: 80, magnetStrength: 4
+    - Disable on mobile/touch devices
+    - _Requirements: 2.1_
+  - [x] 35.2 Add GradualBlur to connection list scroll
+    - Add GradualBlur at top and bottom of list
+    - Configure position, height: 4rem, curve: bezier
+    - _Requirements: 2.1_
+  - [x] 35.3 Add DecryptedText to connection names
+    - Animate server names on card enter view
+    - Configure animateOn: "view", speed: 50
+    - _Requirements: 2.1_
+
+- [x] 36. Visual Effects Integration - Terminal
+  - [x] 36.1 Add optional Lightning background
+    - Add Lightning component behind terminal
+    - Make configurable in settings (disabled by default)
+    - Configure hue based on theme (230 blue / 120 green)
+    - _Requirements: 2.1_
+  - [x] 36.2 Add DecryptedText to terminal toolbar
+    - Animate hostname display on connection
+    - Use binary characters (01) for effect
+    - _Requirements: 2.1_
+
+- [x] 37. Visual Effects Integration - Settings
+  - [x] 37.1 Add ElasticSlider for numeric settings
+    - Replace standard sliders with ElasticSlider
+    - Use for font size, opacity, timeout values
+    - Configure stepped mode for discrete values
+    - _Requirements: 8.1_
+  - [x] 37.2 Add Stepper for setup wizard
+    - Create SetupWizard.vue using Stepper component
+    - Add steps for initial configuration
+    - Show on first launch or from settings
+    - _Requirements: 8.1_
+
+- [x] 38. Visual Effects Integration - P2P
+  - [x] 38.1 Add Lightning background to P2P status
+    - Add Lightning with purple hue (280)
+    - Configure intensity: 0.5 for visibility
+    - _Requirements: 10.1_
+  - [x] 38.2 Add ElectricBorder to QR code
+    - Wrap QRCodeShare with ElectricBorder
+    - Use cyan color (#7df9ff)
+    - Configure speed: 1.2, chaos: 0.5
+    - _Requirements: 10.6_
+  - [x] 38.3 Add RotatingText for P2P tips
+    - Add rotating connection tips below peer list
+    - Include tips about QR sharing, direct connections
+    - _Requirements: 10.1_
+
+- [x] 39. Visual Effects Integration - Header & Sidebar
+  - [x] 39.1 Add DecryptedText to logo
+    - Animate "RUSSH" text on app load
+    - Configure speed: 60, maxIterations: 15
+    - _Requirements: 2.1_
+  - [x] 39.2 Add Magnet to header action buttons
+    - Apply Magnet to notification and settings icons
+    - Configure padding: 40, magnetStrength: 5
+    - _Requirements: 2.1_
+  - [x] 39.3 Add GradualBlur to sidebar scroll
+    - Add blur effect at bottom of connection list
+    - Configure height: 3rem
+    - _Requirements: 2.1_
+  - [x] 39.4 Add FlowingMenu for mobile navigation
+    - Replace mobile menu with FlowingMenu
+    - Configure with navigation items and icons
+    - _Requirements: 14.7_
+
+- [x] 40. Visual Effects Integration - Command Palette
+  - [x] 40.1 Add GradualBlur backdrop
+    - Add blur effect behind command palette
+    - Configure target: "page", strength: 4
+    - _Requirements: 12.1_
+
+- [ ] 41. Checkpoint - Visual Effects Complete
+  - Verify all effects render correctly
+  - Test reduced motion compliance
+  - Verify performance on target devices
+  - Test theme color propagation
+
+- [ ] 42. Visual Effects Testing
+  - [ ]* 42.1 Write property test for reduced motion compliance
+    - **Property 4: Visual Effects Respect Reduced Motion**
+    - **Validates: Requirements 13.1**
+  - [ ]* 42.2 Write property test for settings persistence
+    - **Property 5: Visual Effects Settings Round-Trip**
+    - **Validates: Requirements 8.7**
+  - [ ]* 42.3 Write property test for theme color propagation
+    - **Property 6: Theme Color Propagation to Effects**
+    - **Validates: Requirements 6.1, 6.2**
+
+- [ ] 43. Final Checkpoint
+  - Build and test on all platforms
+  - Verify all requirements are met
+  - Verify visual effects performance
+  - Prepare for release
+
+## Notes
+
+- Tasks marked with `*` are optional property tests
+- Each task references specific requirements for traceability
+- Checkpoints ensure incremental validation
+- Mobile tasks (23-27) can be parallelized with desktop testing
+- Accessibility (28) should be verified throughout development

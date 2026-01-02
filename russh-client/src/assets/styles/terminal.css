@@ -1,0 +1,94 @@
+/* Terminal-specific styles */
+
+/* xterm.js container */
+.xterm {
+  padding: 8px;
+}
+
+.xterm-viewport {
+  overflow-y: auto !important;
+}
+
+/* Terminal themes */
+.terminal-theme-dracula {
+  --terminal-bg: #282a36;
+  --terminal-fg: #f8f8f2;
+  --terminal-cursor: #f8f8f2;
+  --terminal-selection: #44475a;
+}
+
+.terminal-theme-monokai {
+  --terminal-bg: #272822;
+  --terminal-fg: #f8f8f2;
+  --terminal-cursor: #f8f8f2;
+  --terminal-selection: #49483e;
+}
+
+.terminal-theme-nord {
+  --terminal-bg: #2e3440;
+  --terminal-fg: #d8dee9;
+  --terminal-cursor: #d8dee9;
+  --terminal-selection: #434c5e;
+}
+
+.terminal-theme-solarized-dark {
+  --terminal-bg: #002b36;
+  --terminal-fg: #839496;
+  --terminal-cursor: #839496;
+  --terminal-selection: #073642;
+}
+
+.terminal-theme-solarized-light {
+  --terminal-bg: #fdf6e3;
+  --terminal-fg: #657b83;
+  --terminal-cursor: #657b83;
+  --terminal-selection: #eee8d5;
+}
+
+.terminal-theme-one-dark {
+  --terminal-bg: #282c34;
+  --terminal-fg: #abb2bf;
+  --terminal-cursor: #528bff;
+  --terminal-selection: #3e4451;
+}
+
+.terminal-theme-github-dark {
+  --terminal-bg: #0d1117;
+  --terminal-fg: #c9d1d9;
+  --terminal-cursor: #c9d1d9;
+  --terminal-selection: #264f78;
+}
+
+/* Terminal scrollbar */
+.xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Terminal selection */
+.xterm .xterm-selection div {
+  opacity: 0.3;
+}
+
+/* Mobile terminal adjustments */
+@media (max-width: 768px) {
+  .xterm {
+    padding: 4px;
+  }
+  
+  .xterm-viewport {
+    touch-action: pan-y;
+  }
+}

@@ -1,0 +1,23 @@
+[package]
+name = "russh-ssh-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "CLI for russh SSH application"
+
+[[bin]]
+name = "russh"
+path = "src/main.rs"
+
+[dependencies]
+russh-ssh = { path = "../russh-ssh" }
+tokio.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+rpassword = "7.3"
+shellexpand = "3.1"
+dirs = "5.0"

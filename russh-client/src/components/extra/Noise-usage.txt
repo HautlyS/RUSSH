@@ -1,0 +1,12 @@
+<template>
+  <Noise 
+    :pattern-size="250" 
+    :pattern-scale-x="1" 
+    :pattern-scale-y="1"
+    :pattern-alpha="10"
+  />
+</template>
+
+<script setup lang="ts">
+  import Noise from './Noise.vue'
+</script>
