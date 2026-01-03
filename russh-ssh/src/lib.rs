@@ -20,3 +20,6 @@ pub use error::{ConnectionError, ReconnectionError};
 
 pub mod ssh;
 pub use config::*;
+
+// Re-export iroh types needed by consumers
+pub use iroh::NodeId;

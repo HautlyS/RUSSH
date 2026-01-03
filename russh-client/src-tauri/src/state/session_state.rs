@@ -1,9 +1,12 @@
 //! Session state management
 
 use chrono::{DateTime, Utc};
+use russh_ssh::ssh::SshClient;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
-/// Session information
+/// Session information (serializable for frontend)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub session_id: String,
@@ -37,12 +40,16 @@ pub struct SessionStats {
 /// Internal session state (not serialized)
 pub struct SessionState {
     pub info: SessionInfo,
-    // SSH client handle would go here
-    // pub client: Option<SshClient>,
+    /// SSH client handle
+    pub client: Arc<Mutex<SshClient>>,
+    /// Terminal output task handle
+    pub terminal_task: Option<tokio::task::JoinHandle<()>>,
+    /// Terminal input sender
+    pub terminal_input_tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>>,
 }
 
 impl SessionState {
-    pub fn new(session_id: String, host: String, username: String) -> Self {
+    pub fn new(session_id: String, host: String, username: String, client: SshClient) -> Self {
         Self {
             info: SessionInfo {
                 session_id,
@@ -53,6 +60,9 @@ impl SessionState {
                 status: SessionStatus::Connecting,
                 stats: SessionStats::default(),
             },
+            client: Arc::new(Mutex::new(client)),
+            terminal_task: None,
+            terminal_input_tx: None,
         }
     }
 
@@ -70,7 +80,6 @@ impl SessionState {
         self.info.status = SessionStatus::Error;
     }
 
-    #[allow(dead_code)]
     pub fn increment_commands(&mut self) {
         self.info.stats.commands_executed += 1;
     }
@@ -80,8 +89,14 @@ impl SessionState {
         self.info.stats.bytes_sent += bytes;
     }
 
-    #[allow(dead_code)]
     pub fn add_bytes_received(&mut self, bytes: u64) {
         self.info.stats.bytes_received += bytes;
+    }
+
+    pub fn stop_terminal(&mut self) {
+        if let Some(task) = self.terminal_task.take() {
+            task.abort();
+        }
+        self.terminal_input_tx = None;
     }
 }

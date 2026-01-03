@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State, Window};
 use uuid::Uuid;
+use std::path::Path;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -42,50 +43,28 @@ pub async fn file_list(
 ) -> Result<Vec<FileEntry>, AppError> {
     tracing::info!("Listing directory {} for session {}", path, session_id);
     
-    // Verify session exists
-    let _session = state.get_session(&session_id).await
+    // Get SSH client
+    let client = state.get_session_client(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
-    // TODO: Actually list directory using russh-ssh SFTP
-    // For now, return mock data
-    Ok(vec![
-        FileEntry {
-            name: "..".to_string(),
-            path: get_parent_path(&path),
-            is_dir: true,
-            size: 0,
-            permissions: "drwxr-xr-x".to_string(),
-            modified: "2024-01-01T00:00:00Z".to_string(),
-            owner: "root".to_string(),
-        },
-        FileEntry {
-            name: "home".to_string(),
-            path: format!("{}/home", path.trim_end_matches('/')),
-            is_dir: true,
-            size: 4096,
-            permissions: "drwxr-xr-x".to_string(),
-            modified: "2024-01-01T00:00:00Z".to_string(),
-            owner: "root".to_string(),
-        },
-        FileEntry {
-            name: "etc".to_string(),
-            path: format!("{}/etc", path.trim_end_matches('/')),
-            is_dir: true,
-            size: 4096,
-            permissions: "drwxr-xr-x".to_string(),
-            modified: "2024-01-01T00:00:00Z".to_string(),
-            owner: "root".to_string(),
-        },
-        FileEntry {
-            name: "README.md".to_string(),
-            path: format!("{}/README.md", path.trim_end_matches('/')),
-            is_dir: false,
-            size: 1024,
-            permissions: "-rw-r--r--".to_string(),
-            modified: "2024-01-01T00:00:00Z".to_string(),
-            owner: "user".to_string(),
-        },
-    ])
+    let client = client.lock().await;
+    
+    // List directory using SFTP
+    let entries = client.list_directory(&path).await.map_err(|e| {
+        tracing::error!("Failed to list directory: {}", e);
+        AppError::FileOperationFailed(e.to_string())
+    })?;
+    
+    // Convert to frontend format
+    Ok(entries.into_iter().map(|e| FileEntry {
+        name: e.name,
+        path: e.path,
+        is_dir: e.is_dir,
+        size: e.size,
+        permissions: e.permissions,
+        modified: e.modified,
+        owner: e.owner,
+    }).collect())
 }
 
 /// Upload file to remote server
@@ -99,45 +78,56 @@ pub async fn file_upload(
 ) -> Result<String, AppError> {
     tracing::info!("Uploading {} to {} for session {}", local_path, remote_path, session_id);
     
-    // Verify session exists
-    let _session = state.get_session(&session_id).await
+    // Get SSH client
+    let client = state.get_session_client(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
     let transfer_id = Uuid::new_v4().to_string();
-    let filename = local_path.split('/').last()
-        .unwrap_or(&local_path)
-        .to_string();
+    let filename = Path::new(&local_path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| local_path.clone());
     
-    // TODO: Actually upload file using russh-ssh SFTP
-    // For now, simulate progress
+    // Read local file
+    let data = tokio::fs::read(&local_path).await.map_err(|e| {
+        AppError::FileOperationFailed(format!("Failed to read local file: {}", e))
+    })?;
+    
+    let total_bytes = data.len() as u64;
     let tid = transfer_id.clone();
-    let win = window.clone();
     let fname = filename.clone();
+    let win = window.clone();
     
-    tokio::spawn(async move {
-        let total_bytes = 1024 * 1024; // 1MB mock file
-        let mut transferred = 0u64;
-        
-        while transferred < total_bytes {
-            transferred += 102400; // 100KB chunks
-            if transferred > total_bytes {
-                transferred = total_bytes;
-            }
-            
-            let progress = TransferProgress {
-                transfer_id: tid.clone(),
-                filename: fname.clone(),
-                bytes_transferred: transferred,
-                total_bytes,
-                speed_bps: 1024 * 1024, // 1MB/s
-                eta_seconds: (total_bytes - transferred) / (1024 * 1024),
-                status: if transferred >= total_bytes { "completed" } else { "active" }.to_string(),
-            };
-            
-            win.emit("transfer-progress", &progress).ok();
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        }
-    });
+    // Emit initial progress
+    win.emit("transfer-progress", TransferProgress {
+        transfer_id: tid.clone(),
+        filename: fname.clone(),
+        bytes_transferred: 0,
+        total_bytes,
+        speed_bps: 0,
+        eta_seconds: 0,
+        status: "active".to_string(),
+    }).ok();
+    
+    // Upload file
+    {
+        let client = client.lock().await;
+        client.write_file(&remote_path, &data).await.map_err(|e| {
+            tracing::error!("Failed to upload file: {}", e);
+            AppError::TransferFailed(e.to_string())
+        })?;
+    }
+    
+    // Emit completion
+    window.emit("transfer-progress", TransferProgress {
+        transfer_id: tid,
+        filename: fname,
+        bytes_transferred: total_bytes,
+        total_bytes,
+        speed_bps: 0,
+        eta_seconds: 0,
+        status: "completed".to_string(),
+    }).ok();
     
     Ok(transfer_id)
 }
@@ -153,45 +143,61 @@ pub async fn file_download(
 ) -> Result<String, AppError> {
     tracing::info!("Downloading {} to {} for session {}", remote_path, local_path, session_id);
     
-    // Verify session exists
-    let _session = state.get_session(&session_id).await
+    // Get SSH client
+    let client = state.get_session_client(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
     let transfer_id = Uuid::new_v4().to_string();
-    let filename = remote_path.split('/').last()
-        .unwrap_or(&remote_path)
-        .to_string();
+    let filename = Path::new(&remote_path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| remote_path.clone());
     
-    // TODO: Actually download file using russh-ssh SFTP
-    // For now, simulate progress
+    // Get file size first
+    let total_bytes = {
+        let client = client.lock().await;
+        client.file_size(&remote_path).await.unwrap_or(0)
+    };
+    
     let tid = transfer_id.clone();
-    let win = window.clone();
     let fname = filename.clone();
+    let win = window.clone();
     
-    tokio::spawn(async move {
-        let total_bytes = 1024 * 1024; // 1MB mock file
-        let mut transferred = 0u64;
-        
-        while transferred < total_bytes {
-            transferred += 102400; // 100KB chunks
-            if transferred > total_bytes {
-                transferred = total_bytes;
-            }
-            
-            let progress = TransferProgress {
-                transfer_id: tid.clone(),
-                filename: fname.clone(),
-                bytes_transferred: transferred,
-                total_bytes,
-                speed_bps: 1024 * 1024, // 1MB/s
-                eta_seconds: (total_bytes - transferred) / (1024 * 1024),
-                status: if transferred >= total_bytes { "completed" } else { "active" }.to_string(),
-            };
-            
-            win.emit("transfer-progress", &progress).ok();
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        }
-    });
+    // Emit initial progress
+    win.emit("transfer-progress", TransferProgress {
+        transfer_id: tid.clone(),
+        filename: fname.clone(),
+        bytes_transferred: 0,
+        total_bytes,
+        speed_bps: 0,
+        eta_seconds: 0,
+        status: "active".to_string(),
+    }).ok();
+    
+    // Download file
+    let data = {
+        let client = client.lock().await;
+        client.read_file(&remote_path).await.map_err(|e| {
+            tracing::error!("Failed to download file: {}", e);
+            AppError::TransferFailed(e.to_string())
+        })?
+    };
+    
+    // Write to local file
+    tokio::fs::write(&local_path, &data).await.map_err(|e| {
+        AppError::FileOperationFailed(format!("Failed to write local file: {}", e))
+    })?;
+    
+    // Emit completion
+    window.emit("transfer-progress", TransferProgress {
+        transfer_id: tid,
+        filename: fname,
+        bytes_transferred: data.len() as u64,
+        total_bytes: data.len() as u64,
+        speed_bps: 0,
+        eta_seconds: 0,
+        status: "completed".to_string(),
+    }).ok();
     
     Ok(transfer_id)
 }
@@ -205,11 +211,21 @@ pub async fn file_delete(
 ) -> Result<(), AppError> {
     tracing::info!("Deleting {} for session {}", path, session_id);
     
-    // Verify session exists
-    let _session = state.get_session(&session_id).await
+    // Get SSH client
+    let client = state.get_session_client(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
-    // TODO: Actually delete file using russh-ssh SFTP
+    let client = client.lock().await;
+    
+    // Check if it's a directory
+    let is_dir = client.stat_path(&path).await
+        .map(|s| s.is_dir)
+        .unwrap_or(false);
+    
+    client.delete_path(&path, is_dir).await.map_err(|e| {
+        tracing::error!("Failed to delete: {}", e);
+        AppError::FileOperationFailed(e.to_string())
+    })?;
     
     Ok(())
 }
@@ -224,11 +240,16 @@ pub async fn file_rename(
 ) -> Result<(), AppError> {
     tracing::info!("Renaming {} to {} for session {}", old_path, new_path, session_id);
     
-    // Verify session exists
-    let _session = state.get_session(&session_id).await
+    // Get SSH client
+    let client = state.get_session_client(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
-    // TODO: Actually rename file using russh-ssh SFTP
+    let client = client.lock().await;
+    
+    client.rename_path(&old_path, &new_path).await.map_err(|e| {
+        tracing::error!("Failed to rename: {}", e);
+        AppError::FileOperationFailed(e.to_string())
+    })?;
     
     Ok(())
 }
@@ -242,25 +263,16 @@ pub async fn file_mkdir(
 ) -> Result<(), AppError> {
     tracing::info!("Creating directory {} for session {}", path, session_id);
     
-    // Verify session exists
-    let _session = state.get_session(&session_id).await
+    // Get SSH client
+    let client = state.get_session_client(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
-    // TODO: Actually create directory using russh-ssh SFTP
+    let client = client.lock().await;
+    
+    client.create_directory(&path).await.map_err(|e| {
+        tracing::error!("Failed to create directory: {}", e);
+        AppError::FileOperationFailed(e.to_string())
+    })?;
     
     Ok(())
-}
-
-/// Get parent path
-fn get_parent_path(path: &str) -> String {
-    let path = path.trim_end_matches('/');
-    if path.is_empty() || path == "/" {
-        return "/".to_string();
-    }
-    
-    match path.rfind('/') {
-        Some(0) => "/".to_string(),
-        Some(idx) => path[..idx].to_string(),
-        None => "/".to_string(),
-    }
 }

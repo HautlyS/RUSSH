@@ -5,3 +5,4 @@ pub mod profiles;
 pub mod files;
 pub mod p2p;
 pub mod settings;
+pub mod streaming;

@@ -23,6 +23,7 @@ rand.workspace = true
 tracing.workspace = true
 async-ssh2-tokio.workspace = true
 socket2.workspace = true
+stream-download.workspace = true
 base64 = "0.22"
 hex = "0.4"
 

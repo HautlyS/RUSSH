@@ -6,6 +6,7 @@
 //! - Command execution
 //! - Interactive shell
 //! - Port forwarding
+//! - SFTP file operations
 //!
 //! # Requirements Coverage
 //! - Requirement 1: Async SSH Connection Management
@@ -15,10 +16,12 @@
 pub mod client;
 pub mod command;
 pub mod forward;
+pub mod sftp;
 
 pub use client::SshClient;
-pub use command::CommandResult;
+pub use command::{CommandResult, Shell};
 pub use forward::{PortForward, PortForwarder};
+pub use sftp::RemoteFileEntry;
 
 use std::path::PathBuf;
 use std::time::Duration;

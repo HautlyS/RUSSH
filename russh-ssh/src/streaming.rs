@@ -9,6 +9,8 @@
 
 pub mod buffer;
 pub mod handler;
+pub mod video;
 
 pub use buffer::{AdaptiveBuffer, BufferConfig};
-pub use handler::{StreamHandler, StreamPosition};
+pub use handler::{StreamHandler, StreamPosition, StreamState};
+pub use video::{StreamSession, StreamRoom, StreamSource, PlaybackState, SyncEvent, HttpVideoStream};

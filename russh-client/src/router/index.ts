@@ -60,6 +60,11 @@ const routes: RouteRecordRaw[] = [
     name: 'p2p-terminal',
     component: () => import('@/views/P2PTerminalView.vue'),
   },
+  {
+    path: '/streaming',
+    name: 'streaming',
+    component: () => import('@/views/StreamingView.vue'),
+  },
 ];
 
 const router = createRouter({

@@ -181,6 +181,12 @@ pub struct AppState {
     settings: Arc<RwLock<AppSettings>>,
     /// P2P peers
     p2p_peers: Arc<RwLock<HashMap<String, P2PPeerInfo>>>,
+    /// P2P endpoint
+    p2p_endpoint: Arc<RwLock<Option<std::sync::Arc<russh_ssh::p2p::P2PEndpoint>>>>,
+    /// P2P connection manager
+    p2p_manager: Arc<RwLock<Option<std::sync::Arc<russh_ssh::p2p::P2PConnectionManager>>>>,
+    /// Stream sessions
+    stream_sessions: Arc<RwLock<HashMap<String, std::sync::Arc<russh_ssh::streaming::StreamSession>>>>,
     /// Data directory path
     data_dir: PathBuf,
 }
@@ -198,20 +204,18 @@ impl AppState {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             profiles: Arc::new(RwLock::new(HashMap::new())),
             settings: Arc::new(RwLock::new(AppSettings::default())),
+            p2p_endpoint: Arc::new(RwLock::new(None)),
+            p2p_manager: Arc::new(RwLock::new(None)),
             p2p_peers: Arc::new(RwLock::new(HashMap::new())),
+            stream_sessions: Arc::new(RwLock::new(HashMap::new())),
             data_dir,
         }
     }
 
     // Session management
-    pub async fn create_session(&self, host: String, username: String) -> String {
-        let session_id = Uuid::new_v4().to_string();
-        let session = SessionState::new(session_id.clone(), host, username);
-        
+    pub async fn add_session(&self, session_id: String, session: SessionState) {
         let mut sessions = self.sessions.write().await;
-        sessions.insert(session_id.clone(), session);
-        
-        session_id
+        sessions.insert(session_id, session);
     }
 
     pub async fn get_session(&self, session_id: &str) -> Option<SessionInfo> {
@@ -219,6 +223,20 @@ impl AppState {
         sessions.get(session_id).map(|s| s.info.clone())
     }
 
+    pub async fn get_session_client(&self, session_id: &str) -> Option<std::sync::Arc<tokio::sync::Mutex<russh_ssh::ssh::SshClient>>> {
+        let sessions = self.sessions.read().await;
+        sessions.get(session_id).map(|s| s.client.clone())
+    }
+
+    pub async fn get_session_mut<F, R>(&self, session_id: &str, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut SessionState) -> R,
+    {
+        let mut sessions = self.sessions.write().await;
+        sessions.get_mut(session_id).map(f)
+    }
+
+    #[allow(dead_code)]
     pub async fn set_session_connected(&self, session_id: &str) -> Result<(), AppError> {
         let mut sessions = self.sessions.write().await;
         let session = sessions.get_mut(session_id)
@@ -229,9 +247,17 @@ impl AppState {
 
     pub async fn remove_session(&self, session_id: &str) -> Result<(), AppError> {
         let mut sessions = self.sessions.write().await;
-        sessions.remove(session_id)
-            .ok_or_else(|| AppError::SessionNotFound(session_id.to_string()))?;
-        Ok(())
+        if let Some(mut session) = sessions.remove(session_id) {
+            session.stop_terminal();
+            Ok(())
+        } else {
+            Err(AppError::SessionNotFound(session_id.to_string()))
+        }
+    }
+
+    pub async fn get_terminal_input_tx(&self, session_id: &str) -> Option<tokio::sync::mpsc::Sender<Vec<u8>>> {
+        let sessions = self.sessions.read().await;
+        sessions.get(session_id).and_then(|s| s.terminal_input_tx.clone())
     }
 
     pub async fn list_sessions(&self) -> Vec<SessionInfo> {
@@ -348,14 +374,22 @@ impl AppState {
     }
 
     // P2P management
-    pub async fn get_p2p_node_info(&self) -> P2PNodeInfo {
-        // Generate a node ID (in real implementation, this would come from iroh)
-        P2PNodeInfo {
-            node_id: Uuid::new_v4().to_string(),
-            relay_url: None,
-            direct_addresses: vec![],
-            is_online: true,
+    pub async fn get_p2p_state(&self) -> Option<(std::sync::Arc<russh_ssh::p2p::P2PEndpoint>, std::sync::Arc<russh_ssh::p2p::P2PConnectionManager>)> {
+        let endpoint = self.p2p_endpoint.read().await;
+        let manager = self.p2p_manager.read().await;
+        match (endpoint.as_ref(), manager.as_ref()) {
+            (Some(e), Some(m)) => Some((e.clone(), m.clone())),
+            _ => None,
         }
+    }
+
+    pub async fn set_p2p_state(
+        &self,
+        endpoint: std::sync::Arc<russh_ssh::p2p::P2PEndpoint>,
+        manager: std::sync::Arc<russh_ssh::p2p::P2PConnectionManager>,
+    ) {
+        *self.p2p_endpoint.write().await = Some(endpoint);
+        *self.p2p_manager.write().await = Some(manager);
     }
 
     pub async fn add_p2p_peer(&self, peer_id: String, peer_info: P2PPeerInfo) {
@@ -373,6 +407,28 @@ impl AppState {
     pub async fn list_p2p_peers(&self) -> Vec<P2PPeerInfo> {
         let peers = self.p2p_peers.read().await;
         peers.values().cloned().collect()
+    }
+
+    // Stream session management
+    pub async fn add_stream_session(&self, room_id: String, session: std::sync::Arc<russh_ssh::streaming::StreamSession>) {
+        let mut sessions = self.stream_sessions.write().await;
+        sessions.insert(room_id, session);
+    }
+
+    pub async fn get_stream_session(&self, room_id: &str) -> Option<std::sync::Arc<russh_ssh::streaming::StreamSession>> {
+        let sessions = self.stream_sessions.read().await;
+        sessions.get(room_id).cloned()
+    }
+
+    pub async fn remove_stream_session(&self, room_id: &str) {
+        let mut sessions = self.stream_sessions.write().await;
+        sessions.remove(room_id);
+    }
+
+    #[allow(dead_code)]
+    pub async fn list_stream_sessions(&self) -> Vec<String> {
+        let sessions = self.stream_sessions.read().await;
+        sessions.keys().cloned().collect()
     }
 }
 

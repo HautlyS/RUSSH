@@ -59,6 +59,14 @@ fn main() {
             // Settings commands
             commands::settings::settings_load,
             commands::settings::settings_save,
+            // Streaming commands
+            commands::streaming::stream_create_room,
+            commands::streaming::stream_join_room,
+            commands::streaming::stream_leave_room,
+            commands::streaming::stream_get_room,
+            commands::streaming::stream_sync,
+            commands::streaming::stream_update_position,
+            commands::streaming::stream_get_expected_position,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

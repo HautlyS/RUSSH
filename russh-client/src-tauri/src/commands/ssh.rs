@@ -1,10 +1,14 @@
 //! SSH-related Tauri commands
 
+use russh_ssh::ssh::{SshClient, SshConfig, AuthMethod, HostKeyCheck};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::time::Duration;
 use tauri::{Emitter, State, Window};
+use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::state::AppState;
+use crate::state::{AppState, SessionState};
 
 /// Connection request from frontend
 #[derive(Debug, Deserialize)]
@@ -16,7 +20,6 @@ pub struct ConnectionRequest {
     pub auth_type: String,
     pub password: Option<String>,
     pub key_path: Option<String>,
-    #[allow(dead_code)]
     pub key_passphrase: Option<String>,
 }
 
@@ -36,7 +39,6 @@ pub struct ConnectionResponse {
 pub struct CommandRequest {
     pub session_id: String,
     pub command: String,
-    #[allow(dead_code)]
     pub timeout_secs: Option<u64>,
 }
 
@@ -69,36 +71,55 @@ pub async fn ssh_connect(
 ) -> Result<ConnectionResponse, AppError> {
     tracing::info!("Connecting to {}@{}:{}", request.username, request.host, request.port);
     
-    // Validate auth type
-    match request.auth_type.as_str() {
+    // Build auth method
+    let auth = match request.auth_type.as_str() {
         "password" => {
-            if request.password.is_none() {
-                return Err(AppError::AuthenticationFailed("Password required".to_string()));
-            }
+            let password = request.password
+                .ok_or_else(|| AppError::AuthenticationFailed("Password required".to_string()))?;
+            AuthMethod::Password(password)
         }
         "key" => {
-            if request.key_path.is_none() {
-                return Err(AppError::AuthenticationFailed("Key path required".to_string()));
+            let key_path = request.key_path
+                .ok_or_else(|| AppError::AuthenticationFailed("Key path required".to_string()))?;
+            AuthMethod::PublicKey {
+                key_path: PathBuf::from(key_path),
+                passphrase: request.key_passphrase,
             }
         }
-        "agent" => {
-            // SSH agent authentication
-        }
+        "agent" => AuthMethod::Agent,
         _ => return Err(AppError::InvalidAuthMethod),
-    }
+    };
+    
+    // Build SSH config
+    let config = SshConfig {
+        host: request.host.clone(),
+        port: request.port,
+        username: request.username.clone(),
+        auth,
+        timeout: Duration::from_secs(30),
+        known_hosts_path: None,
+        host_key_check: HostKeyCheck::None, // TODO: Make configurable
+    };
+    
+    // Create and connect SSH client
+    let mut client = SshClient::new();
+    client.connect(&config).await.map_err(|e| {
+        tracing::error!("SSH connection failed: {}", e);
+        AppError::ConnectionFailed(e.to_string())
+    })?;
     
     // Create session
-    let session_id = state.create_session(
+    let session_id = Uuid::new_v4().to_string();
+    let mut session = SessionState::new(
+        session_id.clone(),
         request.host.clone(),
         request.username.clone(),
-    ).await;
+        client,
+    );
+    session.set_connected();
     
-    // TODO: Actually connect using russh-ssh library
-    // For now, simulate connection
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    
-    // Mark session as connected
-    state.set_session_connected(&session_id).await?;
+    // Store session
+    state.add_session(session_id.clone(), session).await;
     
     // Emit connection event
     window.emit("connection-state-changed", serde_json::json!({
@@ -107,6 +128,8 @@ pub async fn ssh_connect(
         "host": request.host,
         "username": request.username,
     })).ok();
+    
+    tracing::info!("SSH connection established: {}", session_id);
     
     Ok(ConnectionResponse {
         session_id,
@@ -129,7 +152,13 @@ pub async fn ssh_disconnect(
     let session = state.get_session(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
-    // TODO: Actually disconnect using russh-ssh library
+    // Get client and disconnect
+    if let Some(client) = state.get_session_client(&session_id).await {
+        let mut client = client.lock().await;
+        if let Err(e) = client.disconnect().await {
+            tracing::warn!("Error during disconnect: {}", e);
+        }
+    }
     
     // Remove session
     state.remove_session(&session_id).await?;
@@ -153,17 +182,34 @@ pub async fn ssh_execute(
 ) -> Result<CommandResponse, AppError> {
     tracing::info!("Executing command on session {}: {}", request.session_id, request.command);
     
-    // Verify session exists
-    let _session = state.get_session(&request.session_id).await
+    // Get client
+    let client = state.get_session_client(&request.session_id).await
         .ok_or_else(|| AppError::SessionNotFound(request.session_id.clone()))?;
     
-    // TODO: Actually execute command using russh-ssh library
-    // For now, return mock response
+    let client = client.lock().await;
+    
+    // Execute command with optional timeout
+    let result = if let Some(timeout_secs) = request.timeout_secs {
+        client.execute_with_timeout(&request.command, Duration::from_secs(timeout_secs)).await
+    } else {
+        client.execute(&request.command).await
+    };
+    
+    let result = result.map_err(|e| {
+        tracing::error!("Command execution failed: {}", e);
+        AppError::InternalError(e.to_string())
+    })?;
+    
+    // Update stats
+    state.get_session_mut(&request.session_id, |s| {
+        s.increment_commands();
+        s.add_bytes_received(result.stdout.len() as u64 + result.stderr.len() as u64);
+    }).await;
     
     Ok(CommandResponse {
-        stdout: format!("Executed: {}", request.command),
-        stderr: String::new(),
-        exit_code: 0,
+        stdout: result.stdout_string(),
+        stderr: result.stderr_string(),
+        exit_code: result.exit_code,
     })
 }
 
@@ -192,15 +238,61 @@ pub async fn terminal_start(
 ) -> Result<(), AppError> {
     tracing::info!("Starting terminal for session: {}", session_id);
     
-    // Verify session exists
-    let _session = state.get_session(&session_id).await
+    // Get client
+    let client = state.get_session_client(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
-    // TODO: Start PTY session using russh-ssh library
-    // For now, emit a welcome message
-    window.emit(&format!("terminal-output-{}", session_id), 
-        "Welcome to RUSSH Terminal\r\n$ ".to_string()
-    ).ok();
+    // Open shell with PTY
+    let mut shell = {
+        let client = client.lock().await;
+        client.open_shell("xterm-256color", 80, 24).await.map_err(|e| {
+            tracing::error!("Failed to open shell: {}", e);
+            AppError::InternalError(e.to_string())
+        })?
+    };
+    
+    // Create input channel
+    let (input_tx, mut input_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
+    
+    // Spawn task to handle shell I/O
+    let win = window.clone();
+    let sid = session_id.clone();
+    let terminal_task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                // Handle input from frontend
+                Some(data) = input_rx.recv() => {
+                    if let Err(e) = shell.write(&data).await {
+                        tracing::error!("Failed to write to shell: {}", e);
+                        break;
+                    }
+                }
+                // Read output from shell
+                output = shell.read() => {
+                    match output {
+                        Some(bytes) if !bytes.is_empty() => {
+                            let text = String::from_utf8_lossy(&bytes).to_string();
+                            if win.emit(&format!("terminal-output-{}", sid), &text).is_err() {
+                                break;
+                            }
+                        }
+                        None => {
+                            tracing::info!("Shell closed for session: {}", sid);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        tracing::info!("Terminal task ended for session: {}", sid);
+    });
+    
+    // Store terminal handles in session
+    state.get_session_mut(&session_id, |s| {
+        s.terminal_task = Some(terminal_task);
+        s.terminal_input_tx = Some(input_tx);
+    }).await;
     
     Ok(())
 }
@@ -209,17 +301,16 @@ pub async fn terminal_start(
 #[tauri::command]
 pub async fn terminal_input(
     state: State<'_, AppState>,
-    window: Window,
     session_id: String,
     data: String,
 ) -> Result<(), AppError> {
-    // Verify session exists
-    let _session = state.get_session(&session_id).await
+    // Get input sender from session
+    let tx = state.get_terminal_input_tx(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
-    // TODO: Send input to PTY using russh-ssh library
-    // For now, echo the input back
-    window.emit(&format!("terminal-output-{}", session_id), data).ok();
+    // Send input to terminal task
+    tx.send(data.into_bytes()).await
+        .map_err(|e| AppError::InternalError(format!("Failed to send input: {}", e)))?;
     
     Ok(())
 }
@@ -238,7 +329,8 @@ pub async fn terminal_resize(
     let _session = state.get_session(&session_id).await
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     
-    // TODO: Resize PTY using russh-ssh library
+    // TODO: Implement PTY resize - requires extending Shell with resize capability
+    // The async-ssh2-tokio library would need to support window-change requests
     
     Ok(())
 }
