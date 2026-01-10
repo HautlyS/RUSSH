@@ -30,6 +30,10 @@ const newRoomName = ref('');
 const newRoomUrl = ref('');
 const joinLink = ref('');
 
+function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text);
+}
+
 async function handleCreateRoom() {
   if (!newRoomName.value || !newRoomUrl.value) return;
   
@@ -182,7 +186,7 @@ onMounted(() => {
             </div>
             <button
               class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors"
-              @click="navigator.clipboard.writeText(shareLink)"
+              @click="copyToClipboard(shareLink)"
             >
               Copy Link
             </button>

@@ -18,21 +18,12 @@ function getIcon(type: Notification['type']) {
   }
 }
 
-function getColorClass(type: Notification['type']) {
+function getPixelStyle(type: Notification['type']) {
   switch (type) {
-    case 'success': return 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200';
-    case 'error': return 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200';
-    case 'warning': return 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200';
-    default: return 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200';
-  }
-}
-
-function getIconColorClass(type: Notification['type']) {
-  switch (type) {
-    case 'success': return 'text-green-500';
-    case 'error': return 'text-red-500';
-    case 'warning': return 'text-yellow-500';
-    default: return 'text-blue-500';
+    case 'success': return { bg: 'var(--pixel-green)', border: 'var(--pixel-green-dark)', text: 'var(--pixel-black)' };
+    case 'error': return { bg: 'var(--pixel-red)', border: '#cc3a47', text: 'var(--pixel-white)' };
+    case 'warning': return { bg: 'var(--pixel-yellow)', border: 'var(--pixel-orange)', text: 'var(--pixel-black)' };
+    default: return { bg: 'var(--pixel-blue)', border: 'var(--pixel-cyan)', text: 'var(--pixel-black)' };
   }
 }
 
@@ -42,29 +33,32 @@ function dismiss(id: string) {
 </script>
 
 <template>
-  <div class="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm">
+  <div class="fixed bottom-4 right-4 z-50 space-y-2 max-w-xs">
     <TransitionGroup name="notification">
       <div 
         v-for="notification in visibleNotifications" 
         :key="notification.id"
-        :class="[
-          'flex items-start gap-3 p-4 rounded-lg border shadow-lg',
-          getColorClass(notification.type)
-        ]"
+        class="flex items-start gap-2 p-3 animate-pixel-pop"
+        :style="{
+          background: getPixelStyle(notification.type).bg,
+          border: '3px solid ' + getPixelStyle(notification.type).border,
+          boxShadow: '4px 4px 0 var(--pixel-black)',
+          color: getPixelStyle(notification.type).text
+        }"
       >
         <component 
           :is="getIcon(notification.type)" 
-          :class="['w-5 h-5 flex-shrink-0', getIconColorClass(notification.type)]" 
+          class="w-4 h-4 flex-shrink-0 mt-0.5"
         />
         
         <div class="flex-1 min-w-0">
-          <div class="font-medium">{{ notification.title }}</div>
-          <div class="text-sm opacity-80">{{ notification.message }}</div>
+          <div class="text-[10px] font-bold uppercase">{{ notification.title }}</div>
+          <div class="text-[8px] opacity-90">{{ notification.message }}</div>
           
           <button 
             v-if="notification.action"
             @click="notification.action.handler(); dismiss(notification.id)"
-            class="mt-2 text-sm font-medium underline hover:no-underline"
+            class="mt-1 text-[8px] underline hover:no-underline"
           >
             {{ notification.action.label }}
           </button>
@@ -72,9 +66,9 @@ function dismiss(id: string) {
         
         <button 
           @click="dismiss(notification.id)"
-          class="p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded"
+          class="p-1 hover:opacity-70"
         >
-          <X class="w-4 h-4" />
+          <X class="w-3 h-3" />
         </button>
       </div>
     </TransitionGroup>
@@ -84,20 +78,20 @@ function dismiss(id: string) {
 <style scoped>
 .notification-enter-active,
 .notification-leave-active {
-  transition: all 0.3s ease;
+  transition: all 0.2s steps(4);
 }
 
 .notification-enter-from {
   opacity: 0;
-  transform: translateX(100%);
+  transform: translateX(100%) scale(0.8);
 }
 
 .notification-leave-to {
   opacity: 0;
-  transform: translateX(100%);
+  transform: translateX(100%) scale(0.8);
 }
 
 .notification-move {
-  transition: transform 0.3s ease;
+  transition: transform 0.2s steps(4);
 }
 </style>

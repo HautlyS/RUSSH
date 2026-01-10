@@ -3,11 +3,11 @@
  * SyncVideoPlayer - Synchronized video player with P2P sync support
  */
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
-import { Play, Pause, Volume2, VolumeX, Maximize, Users, Link, Settings } from 'lucide-vue-next';
+import { Play, Pause, Volume2, VolumeX, Maximize, Users, Link } from 'lucide-vue-next';
 import { useStreaming } from '@/composables/useStreaming';
 import type { StreamSource } from '@/types/streaming';
 
-const props = defineProps<{
+defineProps<{
   source?: StreamSource;
   roomId?: string;
 }>();

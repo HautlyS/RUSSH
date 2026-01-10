@@ -2,11 +2,8 @@
 import { computed } from 'vue';
 import { useNotificationStore } from '@/stores/notifications';
 import { useConnectionStore } from '@/stores/connections';
-import { useVisualEffects } from '@/composables/useVisualEffects';
 import { usePlatform } from '@/composables/usePlatform';
-import { Menu, Search, Bell, Settings, Wifi, WifiOff } from 'lucide-vue-next';
-import DecryptedText from '@/components/extra/DecryptedText.vue';
-import Magnet from '@/components/extra/Magnet.vue';
+import { Menu, Search, Bell, Settings, Wifi, WifiOff, Terminal, Command } from 'lucide-vue-next';
 
 defineEmits<{
   'toggle-sidebar': [];
@@ -14,16 +11,10 @@ defineEmits<{
 
 const notificationStore = useNotificationStore();
 const connectionStore = useConnectionStore();
-const { isDecryptedTextEnabled, isMagnetEnabled } = useVisualEffects();
-const { isMobile, isTouchDevice } = usePlatform();
+const { isMobile } = usePlatform();
 
 const unreadCount = computed(() => notificationStore.unreadCount);
 const connectedCount = computed(() => connectionStore.connectedProfiles.length);
-
-// Disable magnet on mobile/touch
-const shouldUseMagnet = computed(() => 
-  isMagnetEnabled.value && !isMobile.value && !isTouchDevice()
-);
 
 function openCommandPalette() {
   document.dispatchEvent(new CustomEvent('open-command-palette'));
@@ -35,40 +26,62 @@ function toggleNotifications() {
 </script>
 
 <template>
-  <header class="h-12 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 drag-region">
+  <header 
+    class="h-[52px] flex items-center px-3 drag-region relative z-50"
+    style="background: var(--pixel-dark); border-bottom: 3px solid var(--pixel-light)"
+  >
+    <!-- Pixel accent line -->
+    <div 
+      class="absolute top-0 left-0 right-0 h-[3px]"
+      style="background: linear-gradient(90deg, var(--pixel-green), var(--pixel-cyan), var(--pixel-pink), var(--pixel-purple))"
+    />
+    
     <!-- Sidebar Toggle -->
     <button 
       @click="$emit('toggle-sidebar')" 
-      class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg no-drag transition-colors"
+      class="pixel-btn-icon no-drag"
       aria-label="Toggle sidebar"
     >
-      <Menu class="w-5 h-5" />
+      <Menu class="w-4 h-4" />
     </button>
     
-    <!-- Logo with DecryptedText -->
+    <!-- Logo -->
     <div class="flex items-center gap-2 ml-2">
-      <div class="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-        <span class="text-white text-xs font-bold">R</span>
+      <div 
+        class="w-8 h-8 flex items-center justify-center animate-pixel-float"
+        style="background: var(--pixel-green); border: 3px solid var(--pixel-green-dark); box-shadow: 3px 3px 0 var(--pixel-black)"
+      >
+        <Terminal class="w-4 h-4" style="color: var(--pixel-black)" />
       </div>
-      <DecryptedText 
-        v-if="isDecryptedTextEnabled"
-        text="RUSSH"
-        :speed="50"
-        animate-on="view"
-        class="font-semibold text-lg hidden sm:block"
-      />
-      <span v-else class="font-semibold text-lg hidden sm:block">RUSSH</span>
+      <span 
+        class="hidden sm:block text-[12px] pixel-glow-green"
+        style="color: var(--pixel-green)"
+      >
+        RUSSH
+      </span>
     </div>
     
-    <!-- Search / Command Palette Trigger -->
-    <div class="flex-1 max-w-md mx-4">
+    <!-- Search / Command Palette -->
+    <div class="flex-1 max-w-md mx-3">
       <button 
         @click="openCommandPalette"
-        class="w-full flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-gray-500 text-sm no-drag transition-colors"
+        class="w-full flex items-center gap-2 px-3 py-1.5 pixel-border no-drag group text-[9px]"
+        style="color: var(--pixel-light)"
       >
-        <Search class="w-4 h-4" />
-        <span class="hidden sm:inline">Search or press</span>
-        <kbd class="hidden sm:inline px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">⌘K</kbd>
+        <Search class="w-3 h-3 group-hover:text-[var(--pixel-green)]" />
+        <span class="hidden sm:inline flex-1 text-left">SEARCH...</span>
+        <div class="hidden sm:flex items-center gap-1">
+          <kbd 
+            class="px-1 py-0.5 text-[7px]"
+            style="background: var(--pixel-mid); border: 2px solid var(--pixel-light)"
+          >
+            <Command class="w-2 h-2 inline" />
+          </kbd>
+          <kbd 
+            class="px-1 py-0.5 text-[7px]"
+            style="background: var(--pixel-mid); border: 2px solid var(--pixel-light)"
+          >K</kbd>
+        </div>
       </button>
     </div>
     
@@ -76,61 +89,39 @@ function toggleNotifications() {
     <div class="flex items-center gap-1">
       <!-- Connection Status -->
       <div 
-        class="flex items-center gap-1.5 px-2 py-1 rounded-lg text-sm"
-        :class="connectedCount > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400'"
+        v-if="!isMobile"
+        :class="[
+          'flex items-center gap-1 px-2 py-1 mr-1 text-[8px]',
+          connectedCount > 0 ? 'pixel-badge-success' : 'pixel-badge'
+        ]"
       >
-        <component :is="connectedCount > 0 ? Wifi : WifiOff" class="w-4 h-4" />
-        <span class="hidden sm:inline">{{ connectedCount }}</span>
+        <component :is="connectedCount > 0 ? Wifi : WifiOff" class="w-3 h-3" />
+        <span>{{ connectedCount }}</span>
       </div>
       
-      <!-- Notifications with Magnet -->
-      <Magnet v-if="shouldUseMagnet" :padding="50" :magnet-strength="3">
-        <button 
-          @click="toggleNotifications" 
-          class="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg no-drag transition-colors"
-          aria-label="Notifications"
-        >
-          <Bell class="w-5 h-5" />
-          <span 
-            v-if="unreadCount > 0" 
-            class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center"
-          >
-            {{ unreadCount > 9 ? '9+' : unreadCount }}
-          </span>
-        </button>
-      </Magnet>
+      <!-- Notifications -->
       <button 
-        v-else
         @click="toggleNotifications" 
-        class="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg no-drag transition-colors"
+        class="pixel-btn-icon no-drag relative"
         aria-label="Notifications"
       >
-        <Bell class="w-5 h-5" />
+        <Bell class="w-4 h-4" />
         <span 
           v-if="unreadCount > 0" 
-          class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center"
+          class="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 flex items-center justify-center text-[7px]"
+          style="background: var(--pixel-red); border: 2px solid var(--pixel-black); color: var(--pixel-white)"
         >
           {{ unreadCount > 9 ? '9+' : unreadCount }}
         </span>
       </button>
       
-      <!-- Settings with Magnet -->
-      <Magnet v-if="shouldUseMagnet" :padding="50" :magnet-strength="3">
-        <router-link 
-          to="/settings" 
-          class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg no-drag transition-colors"
-          aria-label="Settings"
-        >
-          <Settings class="w-5 h-5" />
-        </router-link>
-      </Magnet>
+      <!-- Settings -->
       <router-link 
-        v-else
         to="/settings" 
-        class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg no-drag transition-colors"
+        class="pixel-btn-icon no-drag"
         aria-label="Settings"
       >
-        <Settings class="w-5 h-5" />
+        <Settings class="w-4 h-4" />
       </router-link>
     </div>
   </header>

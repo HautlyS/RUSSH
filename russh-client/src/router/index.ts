@@ -1,16 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 
-// Check if running in Tauri or web
-const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+// Landing mode is only when explicitly set via VITE_LANDING_MODE
+const isLandingMode = import.meta.env.VITE_LANDING_MODE === 'true';
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'home',
-    component: () => isTauri 
-      ? import('@/views/DashboardView.vue') 
-      : import('@/views/LandingView.vue'),
+    component: () => isLandingMode 
+      ? import('@/views/LandingView.vue') 
+      : import('@/views/DashboardView.vue'),
   },
   {
     path: '/dashboard',

@@ -12,24 +12,21 @@ import AppSidebar from '@/components/common/AppSidebar.vue';
 import CommandPalette from '@/components/common/CommandPalette.vue';
 import NotificationContainer from '@/components/common/NotificationContainer.vue';
 import MobileNavigation from '@/components/mobile/MobileNavigation.vue';
-import ClickSpark from '@/components/extra/ClickSpark.vue';
-import Noise from '@/components/extra/Noise.vue';
+import VoxelParticles from '@/components/extra/VoxelParticles.vue';
 
 const route = useRoute();
 const settingsStore = useSettingsStore();
 const connectionStore = useConnectionStore();
 useTheme();
 const { isMobile } = usePlatform();
-const { isClickSparkEnabled, isNoiseEnabled, visualEffects, accentColor } = useVisualEffects();
+const { isNoiseEnabled } = useVisualEffects();
 useKeyboard();
 
 const sidebarCollapsed = ref(false);
 const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
-
-// Landing page has its own layout
 const isLandingPage = computed(() => route.name === 'home' && !isTauri);
 
-const sparkColor = computed(() => visualEffects.value.clickSpark.color || accentColor.value || '#27FF64');
+const pixelColors = ['#00ff88', '#00ffff', '#ff6b9d', '#b967ff', '#fffb00'];
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value;
@@ -47,80 +44,51 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- Landing Page (standalone layout) -->
+  <!-- Landing Page -->
   <router-view v-if="isLandingPage" />
 
   <!-- App Layout -->
-  <template v-else>
-    <ClickSpark
-      v-if="isClickSparkEnabled"
-      :spark-color="sparkColor"
-      :spark-count="visualEffects.clickSpark.sparkCount"
-      :spark-size="visualEffects.clickSpark.sparkSize"
-      :spark-radius="visualEffects.clickSpark.sparkRadius"
-      :duration="visualEffects.clickSpark.duration"
-      easing="ease-out"
-      class="h-screen"
-    >
-      <div class="h-full flex flex-col bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-        <Noise
-          v-if="isNoiseEnabled"
-          :pattern-alpha="visualEffects.noise.alpha"
-          :pattern-refresh-interval="visualEffects.noise.refreshInterval"
-          :mix-blend-mode="visualEffects.noise.mixBlendMode"
-          class="fixed inset-0 pointer-events-none z-[1000]"
-        />
+  <div v-else class="h-screen flex flex-col overflow-hidden" style="background: var(--pixel-black)">
+    <!-- Pixel Grid Background -->
+    <div class="fixed inset-0 pointer-events-none pixel-grid-bg opacity-30" />
+    
+    <!-- Voxel Particles -->
+    <VoxelParticles
+      :colors="pixelColors"
+      :count="25"
+      :speed="0.3"
+      :size="5"
+      :gravity="0.015"
+      class="fixed inset-0 z-0 opacity-60"
+    />
+    
+    <!-- Scanline Effect -->
+    <div
+      v-if="isNoiseEnabled"
+      class="fixed inset-0 pointer-events-none z-[100] opacity-5"
+      style="background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 4px)"
+    />
 
-        <template v-if="!isMobile">
-          <AppHeader @toggle-sidebar="toggleSidebar" />
-          <div class="flex-1 flex overflow-hidden">
-            <AppSidebar :collapsed="sidebarCollapsed" />
-            <main class="flex-1 overflow-auto">
-              <router-view />
-            </main>
-          </div>
-        </template>
-        
-        <template v-else>
-          <main class="flex-1 overflow-auto pb-16">
-            <router-view />
-          </main>
-          <MobileNavigation />
-        </template>
-        
-        <CommandPalette />
-        <NotificationContainer />
-      </div>
-    </ClickSpark>
-
-    <div v-else class="h-screen flex flex-col bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-      <Noise
-        v-if="isNoiseEnabled"
-        :pattern-alpha="visualEffects.noise.alpha"
-        :pattern-refresh-interval="visualEffects.noise.refreshInterval"
-        :mix-blend-mode="visualEffects.noise.mixBlendMode"
-        class="fixed inset-0 pointer-events-none z-[1000]"
-      />
-
-      <template v-if="!isMobile">
-        <AppHeader @toggle-sidebar="toggleSidebar" />
-        <div class="flex-1 flex overflow-hidden">
-          <AppSidebar :collapsed="sidebarCollapsed" />
-          <main class="flex-1 overflow-auto">
-            <router-view />
-          </main>
-        </div>
-      </template>
-      
-      <template v-else>
-        <main class="flex-1 overflow-auto pb-16">
+    <!-- Desktop Layout -->
+    <template v-if="!isMobile">
+      <AppHeader @toggle-sidebar="toggleSidebar" />
+      <div class="flex-1 flex overflow-hidden relative z-10">
+        <AppSidebar :collapsed="sidebarCollapsed" />
+        <main class="flex-1 overflow-auto">
           <router-view />
         </main>
-        <MobileNavigation />
-      </template>
-      
-      <CommandPalette />
-      <NotificationContainer />
-    </div>
-  </template>
+      </div>
+    </template>
+    
+    <!-- Mobile Layout -->
+    <template v-else>
+      <main class="flex-1 overflow-y-auto overflow-x-hidden pb-20 relative z-10 touch-pan-y overscroll-contain">
+        <router-view />
+      </main>
+      <MobileNavigation />
+    </template>
+    
+    <CommandPalette />
+    <NotificationContainer />
+  </div>
 </template>
