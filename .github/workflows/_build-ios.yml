@@ -1,6 +1,9 @@
 name: Build iOS (Unsigned)
 
 on:
+  workflow_call:
+    secrets:
+      inherit: true
   workflow_dispatch:
   push:
     branches:
