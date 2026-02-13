@@ -4,9 +4,9 @@
 //! While the design mentions OCKAM, we use ring for the core encryption
 //! primitives as it provides the same security guarantees.
 
-use crate::error::EncryptionError;
 use crate::encryption::hash::{hash_data, ContentHash};
-use ring::aead::{self, Aad, BoundKey, Nonce, NonceSequence, NONCE_LEN, UnboundKey};
+use crate::error::EncryptionError;
+use ring::aead::{self, Aad, BoundKey, Nonce, NonceSequence, UnboundKey, NONCE_LEN};
 use ring::rand::{SecureRandom, SystemRandom};
 
 /// Size of the encryption key in bytes (256 bits)
@@ -41,8 +41,8 @@ impl serde::Serialize for EncryptedMessage {
     where
         S: serde::Serializer,
     {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
         use serde::ser::SerializeStruct;
-        use base64::{Engine as _, engine::general_purpose::STANDARD};
         let mut state = serializer.serialize_struct("EncryptedMessage", 3)?;
         state.serialize_field("ciphertext", &STANDARD.encode(&self.ciphertext))?;
         state.serialize_field("nonce", &STANDARD.encode(self.nonce))?;
@@ -56,8 +56,8 @@ impl<'de> serde::Deserialize<'de> for EncryptedMessage {
     where
         D: serde::Deserializer<'de>,
     {
-        use base64::{Engine as _, engine::general_purpose::STANDARD};
-        
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
         #[derive(serde::Deserialize)]
         struct Helper {
             ciphertext: String,
@@ -66,9 +66,11 @@ impl<'de> serde::Deserialize<'de> for EncryptedMessage {
         }
 
         let helper = Helper::deserialize(deserializer)?;
-        let ciphertext = STANDARD.decode(&helper.ciphertext)
+        let ciphertext = STANDARD
+            .decode(&helper.ciphertext)
             .map_err(serde::de::Error::custom)?;
-        let nonce_bytes = STANDARD.decode(&helper.nonce)
+        let nonce_bytes = STANDARD
+            .decode(&helper.nonce)
             .map_err(serde::de::Error::custom)?;
 
         if nonce_bytes.len() != NONCE_SIZE {
@@ -113,38 +115,45 @@ impl EncryptionKey {
     }
 
     /// Derive a key from a password using PBKDF2-HMAC-SHA256
-    /// 
+    ///
     /// Uses PBKDF2 with OWASP-recommended iteration count for password-based key derivation.
-    /// 
+    ///
     /// # Security
     /// - Uses PBKDF2-HMAC-SHA256
     /// - 600,000 iterations (OWASP recommended minimum for PBKDF2-SHA256)
     /// - Salt MUST be at least 16 bytes and cryptographically random
-    /// 
+    ///
     /// # Panics
     /// Panics if salt is less than 16 bytes (security requirement)
     pub fn from_password(password: &[u8], salt: &[u8]) -> Self {
         use ring::pbkdf2;
-        
+
         // Enforce minimum salt length for security
-        assert!(salt.len() >= 16, "Salt must be at least 16 bytes for security");
-        
+        assert!(
+            salt.len() >= 16,
+            "Salt must be at least 16 bytes for security"
+        );
+
         // OWASP recommended minimum for PBKDF2-SHA256 (as of 2023)
         const ITERATIONS: u32 = 600_000;
-        
+
+        // SAFETY: ITERATIONS is a non-zero constant
+        let iterations = unsafe { std::num::NonZeroU32::new_unchecked(ITERATIONS) };
+
         let mut key_bytes = [0u8; KEY_SIZE];
         pbkdf2::derive(
             pbkdf2::PBKDF2_HMAC_SHA256,
-            std::num::NonZeroU32::new(ITERATIONS).unwrap(),
+            iterations,
             salt,
             password,
             &mut key_bytes,
         );
+
         Self { key_bytes }
     }
-    
+
     /// Generate a cryptographically secure random salt for password-based key derivation
-    /// 
+    ///
     /// Returns a 32-byte random salt suitable for use with `from_password`.
     pub fn generate_salt() -> Result<[u8; 32], EncryptionError> {
         let rng = SystemRandom::new();
@@ -153,9 +162,9 @@ impl EncryptionKey {
             .map_err(|_| EncryptionError::KeyGeneration("Failed to generate random salt".into()))?;
         Ok(salt)
     }
-    
+
     /// Derive a key from a password using BLAKE3 (fast, for non-password use cases)
-    /// 
+    ///
     /// WARNING: This is NOT suitable for password-based key derivation.
     /// Use `from_password` for password-based keys.
     /// This method is suitable for deriving keys from high-entropy secrets.
@@ -223,7 +232,10 @@ pub fn encrypt(key: &EncryptionKey, plaintext: &[u8]) -> Result<EncryptedMessage
 /// Decrypt ciphertext using AES-256-GCM
 ///
 /// Returns the original plaintext if decryption and verification succeed.
-pub fn decrypt(key: &EncryptionKey, message: &EncryptedMessage) -> Result<Vec<u8>, EncryptionError> {
+pub fn decrypt(
+    key: &EncryptionKey,
+    message: &EncryptedMessage,
+) -> Result<Vec<u8>, EncryptionError> {
     // Create opening key
     let unbound_key = UnboundKey::new(&aead::AES_256_GCM, key.as_bytes())
         .map_err(|_| EncryptionError::Decryption)?;
@@ -247,7 +259,11 @@ pub fn decrypt(key: &EncryptionKey, message: &EncryptedMessage) -> Result<Vec<u8
 }
 
 /// Encrypt plaintext and return only the ciphertext bytes (without metadata)
-pub fn encrypt_raw(key: &EncryptionKey, nonce: &[u8; NONCE_SIZE], plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+pub fn encrypt_raw(
+    key: &EncryptionKey,
+    nonce: &[u8; NONCE_SIZE],
+    plaintext: &[u8],
+) -> Result<Vec<u8>, EncryptionError> {
     let unbound_key = UnboundKey::new(&aead::AES_256_GCM, key.as_bytes())
         .map_err(|_| EncryptionError::Encryption("Failed to create encryption key".into()))?;
 
@@ -263,7 +279,11 @@ pub fn encrypt_raw(key: &EncryptionKey, nonce: &[u8; NONCE_SIZE], plaintext: &[u
 }
 
 /// Decrypt raw ciphertext bytes
-pub fn decrypt_raw(key: &EncryptionKey, nonce: &[u8; NONCE_SIZE], ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+pub fn decrypt_raw(
+    key: &EncryptionKey,
+    nonce: &[u8; NONCE_SIZE],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, EncryptionError> {
     let unbound_key = UnboundKey::new(&aead::AES_256_GCM, key.as_bytes())
         .map_err(|_| EncryptionError::Decryption)?;
 
@@ -344,12 +364,12 @@ mod tests {
         // Different password should produce different key
         let key3 = EncryptionKey::from_password(b"different password", salt);
         assert_ne!(key1.as_bytes(), key3.as_bytes());
-        
+
         // Different salt should produce different key
         let key4 = EncryptionKey::from_password(password, b"different_salt_16!!");
         assert_ne!(key1.as_bytes(), key4.as_bytes());
     }
-    
+
     #[test]
     #[should_panic(expected = "Salt must be at least 16 bytes")]
     fn key_from_password_short_salt_panics() {
@@ -357,7 +377,7 @@ mod tests {
         let short_salt = b"short"; // Less than 16 bytes
         let _ = EncryptionKey::from_password(password, short_salt);
     }
-    
+
     #[test]
     fn generate_salt_produces_unique_values() {
         let salt1 = EncryptionKey::generate_salt().unwrap();
@@ -365,7 +385,7 @@ mod tests {
         assert_ne!(salt1, salt2, "Generated salts should be unique");
         assert_eq!(salt1.len(), 32, "Salt should be 32 bytes");
     }
-    
+
     #[test]
     fn key_from_high_entropy_secret() {
         let secret = b"high entropy secret key material";

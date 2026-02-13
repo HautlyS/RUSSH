@@ -80,8 +80,7 @@ impl<'de> Deserialize<'de> for Identity {
         }
 
         let helper = Helper::deserialize(deserializer)?;
-        let public_key_bytes = hex::decode(&helper.public_key)
-            .map_err(serde::de::Error::custom)?;
+        let public_key_bytes = hex::decode(&helper.public_key).map_err(serde::de::Error::custom)?;
 
         if public_key_bytes.len() != PUBLIC_KEY_SIZE {
             return Err(serde::de::Error::custom("Invalid public key length"));
@@ -109,10 +108,12 @@ impl KeyPair {
     /// Generate a new X25519 key pair
     pub fn generate() -> Result<Self, EncryptionError> {
         let rng = SystemRandom::new();
-        let private_key = EphemeralPrivateKey::generate(&X25519, &rng)
-            .map_err(|_| EncryptionError::KeyGeneration("Failed to generate X25519 key pair".into()))?;
+        let private_key = EphemeralPrivateKey::generate(&X25519, &rng).map_err(|_| {
+            EncryptionError::KeyGeneration("Failed to generate X25519 key pair".into())
+        })?;
 
-        let public_key = private_key.compute_public_key()
+        let public_key = private_key
+            .compute_public_key()
             .map_err(|_| EncryptionError::KeyGeneration("Failed to compute public key".into()))?;
 
         let mut public_key_bytes = [0u8; PUBLIC_KEY_SIZE];
@@ -135,7 +136,10 @@ impl KeyPair {
     }
 
     /// Perform key agreement with a peer's public key
-    pub fn agree(self, peer_public_key: &[u8; PUBLIC_KEY_SIZE]) -> Result<SharedSecret, EncryptionError> {
+    pub fn agree(
+        self,
+        peer_public_key: &[u8; PUBLIC_KEY_SIZE],
+    ) -> Result<SharedSecret, EncryptionError> {
         let peer_public = UnparsedPublicKey::new(&X25519, peer_public_key);
 
         agreement::agree_ephemeral(self.private_key, &peer_public, |shared_secret| {
@@ -191,7 +195,7 @@ pub enum ChannelRole {
 }
 
 /// Replay protection window using a bitmap
-/// 
+///
 /// Implements a sliding window algorithm to detect replay attacks while
 /// allowing for out-of-order message delivery within the window.
 struct ReplayWindow {
@@ -209,7 +213,7 @@ impl ReplayWindow {
             bitmap: 0,
         }
     }
-    
+
     /// Check if a message counter is valid (not a replay) and mark it as seen
     /// Returns true if the message is valid, false if it's a replay
     fn check_and_mark(&mut self, counter: u64) -> bool {
@@ -322,7 +326,9 @@ impl SecureChannel {
 
         // Check counter for replay protection using sliding window
         {
-            let mut window = self.replay_window.write()
+            let mut window = self
+                .replay_window
+                .write()
                 .map_err(|_| EncryptionError::ChannelEstablishment("Lock poisoned".into()))?;
             if !window.check_and_mark(message.counter) {
                 return Err(EncryptionError::AuthenticationFailed);
@@ -400,8 +406,15 @@ impl SecureChannelBuilder {
         init: HandshakeMessage,
     ) -> Result<(SecureChannel, HandshakeMessage), EncryptionError> {
         let (peer_public_key, peer_identity) = match init {
-            HandshakeMessage::Init { public_key, identity } => (public_key, identity),
-            _ => return Err(EncryptionError::ChannelEstablishment("Expected Init message".into())),
+            HandshakeMessage::Init {
+                public_key,
+                identity,
+            } => (public_key, identity),
+            _ => {
+                return Err(EncryptionError::ChannelEstablishment(
+                    "Expected Init message".into(),
+                ))
+            }
         };
 
         // Create response message
@@ -436,8 +449,15 @@ impl SecureChannelBuilder {
         response: HandshakeMessage,
     ) -> Result<SecureChannel, EncryptionError> {
         let (peer_public_key, peer_identity) = match response {
-            HandshakeMessage::Response { public_key, identity } => (public_key, identity),
-            _ => return Err(EncryptionError::ChannelEstablishment("Expected Response message".into())),
+            HandshakeMessage::Response {
+                public_key,
+                identity,
+            } => (public_key, identity),
+            _ => {
+                return Err(EncryptionError::ChannelEstablishment(
+                    "Expected Response message".into(),
+                ))
+            }
         };
 
         // Perform key agreement
@@ -463,7 +483,10 @@ impl SecureChannelBuilder {
 
 impl Default for SecureChannelBuilder {
     fn default() -> Self {
-        Self::new().expect("Failed to create SecureChannelBuilder")
+        Self::new().unwrap_or_else(|e| {
+            tracing::error!("Failed to create SecureChannelBuilder: {}", e);
+            panic!("Critical: Cannot create SecureChannelBuilder");
+        })
     }
 }
 
@@ -589,8 +612,14 @@ mod tests {
 
         match (init_msg, deserialized) {
             (
-                HandshakeMessage::Init { public_key: pk1, identity: id1 },
-                HandshakeMessage::Init { public_key: pk2, identity: id2 },
+                HandshakeMessage::Init {
+                    public_key: pk1,
+                    identity: id1,
+                },
+                HandshakeMessage::Init {
+                    public_key: pk2,
+                    identity: id2,
+                },
             ) => {
                 assert_eq!(pk1, pk2);
                 assert_eq!(id1.identifier, id2.identifier);
@@ -598,7 +627,7 @@ mod tests {
             _ => panic!("Deserialization produced wrong variant"),
         }
     }
-    
+
     #[test]
     fn replay_attack_prevention() {
         // Establish channel
@@ -613,16 +642,16 @@ mod tests {
         // Send a message
         let plaintext = b"Original message";
         let encrypted = initiator_channel.encrypt(plaintext).unwrap();
-        
+
         // First decryption should succeed
         let decrypted = responder_channel.decrypt(&encrypted).unwrap();
         assert_eq!(plaintext.as_slice(), decrypted.as_slice());
-        
+
         // Replay attack - same message again should fail
         let result = responder_channel.decrypt(&encrypted);
         assert!(result.is_err(), "Replay attack should be detected");
     }
-    
+
     #[test]
     fn out_of_order_messages_within_window() {
         // Establish channel
@@ -638,12 +667,12 @@ mod tests {
         let msg1 = initiator_channel.encrypt(b"Message 1").unwrap();
         let msg2 = initiator_channel.encrypt(b"Message 2").unwrap();
         let msg3 = initiator_channel.encrypt(b"Message 3").unwrap();
-        
+
         // Receive out of order (3, 1, 2) - all should succeed
         assert!(responder_channel.decrypt(&msg3).is_ok());
         assert!(responder_channel.decrypt(&msg1).is_ok());
         assert!(responder_channel.decrypt(&msg2).is_ok());
-        
+
         // Replay any of them should fail
         assert!(responder_channel.decrypt(&msg1).is_err());
         assert!(responder_channel.decrypt(&msg2).is_err());

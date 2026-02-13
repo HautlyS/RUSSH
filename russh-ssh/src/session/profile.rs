@@ -58,7 +58,7 @@ pub struct SessionProfile {
 }
 
 /// Authentication configuration (serializable version)
-/// 
+///
 /// # Security Warning
 /// The `Password` variant stores passwords in plain text when serialized.
 /// For production use, consider:
@@ -68,7 +68,7 @@ pub struct SessionProfile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuthConfig {
     /// Password authentication
-    /// 
+    ///
     /// WARNING: Passwords are stored in plain text. Use with caution.
     /// Consider using `AuthConfig::password_prompt()` for interactive use.
     Password {
@@ -89,12 +89,12 @@ pub enum AuthConfig {
 
 impl AuthConfig {
     /// Create a password auth config that prompts at runtime (no stored password)
-    /// 
+    ///
     /// This is safer than storing passwords as it requires user input each time.
     pub fn password_prompt() -> Self {
         AuthConfig::Password { password: None }
     }
-    
+
     /// Create a public key auth config
     pub fn public_key(key_path: impl Into<PathBuf>, encrypted: bool) -> Self {
         AuthConfig::PublicKey {
@@ -102,31 +102,35 @@ impl AuthConfig {
             encrypted,
         }
     }
-    
+
     /// Create an SSH agent auth config
     pub fn agent() -> Self {
         AuthConfig::Agent
     }
-    
+
     /// Check if this auth config stores sensitive data
     pub fn stores_sensitive_data(&self) -> bool {
         matches!(self, AuthConfig::Password { password: Some(_) })
     }
-    
+
     /// Convert to AuthMethod for connection
     pub fn to_auth_method(&self, password_prompt: Option<&str>) -> Option<AuthMethod> {
         match self {
-            AuthConfig::Password { password } => {
-                password.as_ref()
-                    .or(password_prompt.map(|s| s.to_string()).as_ref())
-                    .map(|p| AuthMethod::Password(p.clone()))
-            }
-            AuthConfig::PublicKey { key_path, encrypted } => {
-                Some(AuthMethod::PublicKey {
-                    key_path: key_path.clone(),
-                    passphrase: if *encrypted { password_prompt.map(|s| s.to_string()) } else { None },
-                })
-            }
+            AuthConfig::Password { password } => password
+                .as_ref()
+                .or(password_prompt.map(|s| s.to_string()).as_ref())
+                .map(|p| AuthMethod::Password(p.clone())),
+            AuthConfig::PublicKey {
+                key_path,
+                encrypted,
+            } => Some(AuthMethod::PublicKey {
+                key_path: key_path.clone(),
+                passphrase: if *encrypted {
+                    password_prompt.map(|s| s.to_string())
+                } else {
+                    None
+                },
+            }),
             AuthConfig::Agent => Some(AuthMethod::Agent),
         }
     }
@@ -222,10 +226,7 @@ impl SessionProfile {
 
     /// Check if profile has all required parameters
     pub fn is_complete(&self) -> bool {
-        !self.name.is_empty() 
-            && !self.host.is_empty() 
-            && !self.username.is_empty()
-            && self.port > 0
+        !self.name.is_empty() && !self.host.is_empty() && !self.username.is_empty() && self.port > 0
     }
 }
 

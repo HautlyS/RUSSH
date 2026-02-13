@@ -16,10 +16,10 @@
 //! - Requirement 3.4: Multiplexed bidirectional streams
 //! - Requirement 3.5: Connection metadata (latency, type)
 
-pub mod endpoint;
 pub mod connection;
+pub mod endpoint;
 pub mod stream;
 
-pub use endpoint::*;
 pub use connection::*;
+pub use endpoint::*;
 pub use stream::*;

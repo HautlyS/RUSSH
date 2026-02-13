@@ -3,8 +3,8 @@
 //! Feature: russh-ssh
 //! These tests validate the correctness properties of the adaptive buffer.
 
-use russh_ssh::streaming::buffer::{AdaptiveBuffer, BufferConfig};
 use proptest::prelude::*;
+use russh_ssh::streaming::buffer::{AdaptiveBuffer, BufferConfig};
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
@@ -21,9 +21,9 @@ proptest! {
     ) {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let mut buffer = AdaptiveBuffer::new(config);
-        
+
         buffer.add_data(0, data.clone());
-        
+
         let read = buffer.read(data.len()).unwrap();
         prop_assert_eq!(data, read, "Buffer must preserve data integrity");
     }
@@ -41,19 +41,19 @@ proptest! {
     ) {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let mut buffer = AdaptiveBuffer::new(config);
-        
+
         buffer.add_data(0, data.clone());
-        
+
         let mut expected_position = 0u64;
         for read_size in read_sizes {
             let actual_read_size = read_size.min(data.len() - expected_position as usize);
             if actual_read_size == 0 {
                 break;
             }
-            
+
             buffer.read(actual_read_size);
             expected_position += actual_read_size as u64;
-            
+
             prop_assert_eq!(
                 buffer.position(), expected_position,
                 "Buffer position must advance by bytes read"
@@ -77,10 +77,10 @@ proptest! {
         let max_buffer_size = 1024 * 1024;
         let config = BufferConfig::new(1024, max_buffer_size);
         let mut buffer = AdaptiveBuffer::new(config);
-        
+
         for (position, data) in chunks {
             buffer.add_data(position, data);
-            
+
             // Note: This may not be exact due to eviction, but should not exceed max
             prop_assert!(
                 buffer.buffered_bytes() <= max_buffer_size,
@@ -103,15 +103,15 @@ proptest! {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let mut buffer = AdaptiveBuffer::new(config)
             .with_stream_size(data.len() as u64);
-        
+
         buffer.add_data(0, data.clone());
-        
+
         let seek_pos = seek_position.min(data.len() as u64 - 1);
         let result = buffer.seek(seek_pos);
-        
+
         prop_assert!(result, "Seek to buffered position must succeed");
         prop_assert_eq!(buffer.position(), seek_pos, "Position must be updated after seek");
-        
+
         // Read should return data from seek position
         if let Some(read_data) = buffer.read(10) {
             let expected_start = seek_pos as usize;
@@ -136,12 +136,12 @@ proptest! {
     ) {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let mut buffer = AdaptiveBuffer::new(config);
-        
+
         buffer.add_data(0, data);
         buffer.read(100);
-        
+
         buffer.clear();
-        
+
         prop_assert_eq!(buffer.position(), 0, "Position must be 0 after clear");
         prop_assert_eq!(buffer.buffered_bytes(), 0, "Buffered bytes must be 0 after clear");
         prop_assert!(buffer.buffered_ranges().is_empty(), "Ranges must be empty after clear");
@@ -163,12 +163,12 @@ proptest! {
         let max_size = 2048;
         let config = BufferConfig::new(512, max_size);
         let mut buffer = AdaptiveBuffer::new(config);
-        
+
         let mut position = 0u64;
         for chunk in chunks {
             buffer.add_data(position, chunk.clone());
             position += chunk.len() as u64;
-            
+
             prop_assert!(
                 buffer.buffered_bytes() <= max_size,
                 "Buffer must never exceed max size: {} > {}",
@@ -190,18 +190,18 @@ proptest! {
     ) {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let mut buffer = AdaptiveBuffer::new(config);
-        
+
         buffer.add_data(position, data.clone());
-        
+
         let ranges = buffer.buffered_ranges();
         prop_assert!(!ranges.is_empty(), "Ranges must not be empty after adding data");
-        
+
         // Check that the position is marked as buffered
         prop_assert!(
             buffer.is_buffered(position),
             "Start position must be buffered"
         );
-        
+
         if data.len() > 1 {
             prop_assert!(
                 buffer.is_buffered(position + data.len() as u64 - 1),
@@ -231,11 +231,11 @@ mod watermark_tests {
             let config = BufferConfig::new(1024, 1024 * 1024)
                 .with_watermarks(200, 800);
             let mut buffer = AdaptiveBuffer::new(config);
-            
+
             // Add less data than low watermark
             let data = vec![0u8; data_size.min(199)];
             buffer.add_data(0, data);
-            
+
             prop_assert!(
                 buffer.needs_data(),
                 "Buffer below low watermark must need data"
@@ -254,11 +254,11 @@ mod watermark_tests {
             let config = BufferConfig::new(1024, 2048)
                 .with_watermarks(200, 800);
             let mut buffer = AdaptiveBuffer::new(config);
-            
+
             // Add more data than high watermark
             let data = vec![0u8; 800 + extra_size];
             buffer.add_data(0, data);
-            
+
             prop_assert!(
                 buffer.is_full(),
                 "Buffer above high watermark must be full"

@@ -51,16 +51,15 @@ impl SshClient {
     /// - Requirement 9.3: Return exit code when command completes
     pub async fn execute(&self, command: &str) -> Result<CommandResult, SshError> {
         let client = self.inner().ok_or(SshError::NotConnected)?;
-        
+
         tracing::debug!("Executing command: {}", command);
-        
-        let result = client.execute(command).await
+
+        let result = client
+            .execute(command)
+            .await
             .map_err(|e| SshError::CommandExecution(e.to_string()))?;
 
-        tracing::debug!(
-            "Command completed with exit code: {}", 
-            result.exit_status
-        );
+        tracing::debug!("Command completed with exit code: {}", result.exit_status);
 
         Ok(CommandResult {
             stdout: result.stdout.into_bytes(),
@@ -70,7 +69,7 @@ impl SshClient {
     }
 
     /// Execute command with streaming output
-    /// 
+    ///
     /// Sends stdout and stderr through separate channels as data becomes available.
     /// Returns the exit code when the command completes.
     ///
@@ -88,23 +87,23 @@ impl SshClient {
         stderr_tx: mpsc::Sender<Vec<u8>>,
     ) -> Result<i32, SshError> {
         tracing::debug!("Executing command with streaming: {}", command);
-        
+
         let res = self.execute(command).await?;
-        
+
         // Send stdout if not empty
         if !res.stdout.is_empty() {
             if let Err(e) = stdout_tx.send(res.stdout).await {
                 tracing::warn!("Failed to send stdout: {}", e);
             }
         }
-        
+
         // Send stderr if not empty
         if !res.stderr.is_empty() {
             if let Err(e) = stderr_tx.send(res.stderr).await {
                 tracing::warn!("Failed to send stderr: {}", e);
             }
         }
-        
+
         Ok(res.exit_code)
     }
 
@@ -117,17 +116,17 @@ impl SshClient {
         stop_on_error: bool,
     ) -> Result<Vec<CommandResult>, SshError> {
         let mut results = Vec::with_capacity(commands.len());
-        
+
         for command in commands {
             let result = self.execute(command).await?;
             let failed = !result.success();
             results.push(result);
-            
+
             if failed && stop_on_error {
                 break;
             }
         }
-        
+
         Ok(results)
     }
 
@@ -148,7 +147,7 @@ impl SshClient {
         timeout: Duration,
     ) -> Result<CommandResult, SshError> {
         tracing::debug!("Executing command with timeout {:?}: {}", timeout, command);
-        
+
         match tokio::time::timeout(timeout, self.execute(command)).await {
             Ok(result) => result,
             Err(_) => {
@@ -180,21 +179,30 @@ impl SshClient {
         stdout_tx: mpsc::Sender<Vec<u8>>,
         stderr_tx: mpsc::Sender<Vec<u8>>,
     ) -> Result<i32, SshError> {
-        tracing::debug!("Executing streaming command with timeout {:?}: {}", timeout, command);
-        
+        tracing::debug!(
+            "Executing streaming command with timeout {:?}: {}",
+            timeout,
+            command
+        );
+
         match tokio::time::timeout(
             timeout,
-            self.execute_streaming(command, stdout_tx, stderr_tx)
-        ).await {
+            self.execute_streaming(command, stdout_tx, stderr_tx),
+        )
+        .await
+        {
             Ok(result) => result,
             Err(_) => {
-                tracing::warn!("Streaming command timed out after {:?}: {}", timeout, command);
+                tracing::warn!(
+                    "Streaming command timed out after {:?}: {}",
+                    timeout,
+                    command
+                );
                 Err(SshError::CommandTimeout(timeout))
             }
         }
     }
 }
-
 
 /// Interactive shell session with PTY
 ///
@@ -224,7 +232,13 @@ impl Shell {
         cols: u32,
         rows: u32,
     ) -> Self {
-        Self { stdin_tx, stdout_rx, term, cols, rows }
+        Self {
+            stdin_tx,
+            stdout_rx,
+            term,
+            cols,
+            rows,
+        }
     }
 
     /// Get the terminal type
@@ -239,7 +253,9 @@ impl Shell {
 
     /// Write data to stdin
     pub async fn write(&self, data: &[u8]) -> Result<(), SshError> {
-        self.stdin_tx.send(data.to_vec()).await
+        self.stdin_tx
+            .send(data.to_vec())
+            .await
             .map_err(|e| SshError::CommandExecution(format!("Failed to write to stdin: {}", e)))
     }
 
@@ -250,7 +266,9 @@ impl Shell {
 
     /// Send EOF to stdin (signals end of input)
     pub async fn send_eof(&self) -> Result<(), SshError> {
-        self.stdin_tx.send(Vec::new()).await
+        self.stdin_tx
+            .send(Vec::new())
+            .await
             .map_err(|e| SshError::CommandExecution(format!("Failed to send EOF: {}", e)))
     }
 }
@@ -274,30 +292,37 @@ impl SshClient {
     /// when request_pty=true is passed to execute_io.
     pub async fn open_shell(&self, term: &str, cols: u32, rows: u32) -> Result<Shell, SshError> {
         let client = self.inner().ok_or(SshError::NotConnected)?;
-        
-        tracing::debug!("Opening shell with PTY: term={}, cols={}, rows={}", term, cols, rows);
-        
+
+        tracing::debug!(
+            "Opening shell with PTY: term={}, cols={}, rows={}",
+            term,
+            cols,
+            rows
+        );
+
         // Create channels for I/O
         let (stdin_tx, stdin_rx) = mpsc::channel::<Vec<u8>>(32);
         let (stdout_tx, stdout_rx) = mpsc::channel::<Vec<u8>>(32);
-        
+
         // Clone client for the background task
         let client_clone = client.clone();
         let term_clone = term.to_string();
-        
+
         // Spawn background task to run the shell
         tokio::spawn(async move {
             // Use a shell command that starts an interactive shell
             // The PTY flag enables pseudo-terminal allocation
-            let result = client_clone.execute_io(
-                "/bin/sh",  // Use sh as the shell command
-                stdout_tx,
-                None,       // stderr goes to stdout when PTY is enabled
-                Some(stdin_rx),
-                true,       // request_pty = true for interactive shell
-                Some(0),    // default exit code
-            ).await;
-            
+            let result = client_clone
+                .execute_io(
+                    "/bin/sh", // Use sh as the shell command
+                    stdout_tx,
+                    None, // stderr goes to stdout when PTY is enabled
+                    Some(stdin_rx),
+                    true,    // request_pty = true for interactive shell
+                    Some(0), // default exit code
+                )
+                .await;
+
             match result {
                 Ok(exit_code) => {
                     tracing::info!("Shell session ended with exit code: {}", exit_code);
@@ -307,9 +332,15 @@ impl SshClient {
                 }
             }
         });
-        
+
         tracing::info!("Interactive shell opened with PTY (term={})", term_clone);
-        
-        Ok(Shell::new(stdin_tx, stdout_rx, term.to_string(), cols, rows))
+
+        Ok(Shell::new(
+            stdin_tx,
+            stdout_rx,
+            term.to_string(),
+            cols,
+            rows,
+        ))
     }
 }

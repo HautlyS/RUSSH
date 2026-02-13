@@ -106,9 +106,10 @@ impl P2PEndpoint {
     /// - Requirement 3.1: Creates Iroh Endpoint with QUIC transport
     /// - Requirement 3.3: Configures relay servers for fallback
     pub async fn bind(config: P2PConfig) -> Result<Self, P2PError> {
-        let secret_key = config.secret_key.clone().unwrap_or_else(|| {
-            SecretKey::generate(rand::rngs::OsRng)
-        });
+        let secret_key = config
+            .secret_key
+            .clone()
+            .unwrap_or_else(|| SecretKey::generate(rand::rngs::OsRng));
         let node_id = secret_key.public();
 
         let mut builder = Endpoint::builder()
@@ -119,11 +120,48 @@ impl P2PEndpoint {
         builder = match &config.relay_mode {
             P2PRelayMode::Default => builder.relay_mode(RelayMode::Default),
             P2PRelayMode::Disabled => builder.relay_mode(RelayMode::Disabled),
-            P2PRelayMode::Custom(_urls) => {
-                // For custom relays, we'd need to build a RelayMap
-                // For now, fall back to default
-                tracing::warn!("Custom relay configuration not yet implemented, using default");
-                builder.relay_mode(RelayMode::Default)
+            P2PRelayMode::Custom(urls) => {
+                if urls.is_empty() {
+                    tracing::warn!("Empty custom relay list, using default");
+                    builder.relay_mode(RelayMode::Default)
+                } else {
+                    // Parse URLs and create relay map
+                    let relay_urls: Vec<iroh::RelayUrl> = urls
+                        .iter()
+                        .filter_map(|url_str| {
+                            url_str
+                                .parse::<iroh::RelayUrl>()
+                                .map_err(|e| {
+                                    tracing::warn!("Invalid relay URL '{}': {}", url_str, e);
+                                    e
+                                })
+                                .ok()
+                        })
+                        .collect();
+
+                    if relay_urls.is_empty() {
+                        tracing::warn!("No valid relay URLs, using default");
+                        builder.relay_mode(RelayMode::Default)
+                    } else {
+                        tracing::info!("Using {} custom relay server(s)", relay_urls.len());
+                        let relay_map =
+                            iroh::RelayMap::from_nodes(relay_urls.into_iter().map(|url| {
+                                iroh::RelayNode {
+                                    url: url.clone(),
+                                    stun_only: false,
+                                    stun_port: 3478,
+                                    quic: None,
+                                }
+                            }))
+                            .map_err(|e| {
+                                P2PError::ConnectionFailed {
+                                    peer_id: node_id.to_string(),
+                                    reason: format!("Failed to create relay map: {}", e),
+                                }
+                            })?;
+                        builder.relay_mode(RelayMode::Custom(relay_map))
+                    }
+                }
             }
         };
 
@@ -132,12 +170,13 @@ impl P2PEndpoint {
             builder = builder.discovery_n0();
         }
 
-        let endpoint = builder.bind().await.map_err(|e| {
-            P2PError::ConnectionFailed {
+        let endpoint = builder
+            .bind()
+            .await
+            .map_err(|e| P2PError::ConnectionFailed {
                 peer_id: node_id.to_string(),
                 reason: format!("Failed to bind endpoint: {}", e),
-            }
-        })?;
+            })?;
 
         tracing::info!(
             node_id = %node_id,
@@ -179,12 +218,13 @@ impl P2PEndpoint {
 
     /// Get our node address for sharing with peers
     pub async fn node_addr(&self) -> Result<iroh::NodeAddr, P2PError> {
-        self.endpoint.node_addr().await.map_err(|e| {
-            P2PError::ConnectionFailed {
+        self.endpoint
+            .node_addr()
+            .await
+            .map_err(|e| P2PError::ConnectionFailed {
                 peer_id: self.node_id.to_string(),
                 reason: format!("Failed to get node address: {}", e),
-            }
-        })
+            })
     }
 
     /// Get direct addresses (if any)

@@ -10,11 +10,19 @@ use crate::state::{AppState, ProfileData};
 #[tauri::command]
 pub async fn profile_create(
     state: State<'_, AppState>,
-    profile: ProfileData,
+    mut profile: ProfileData,
+    password: Option<String>,
 ) -> Result<String, AppError> {
     let id = Uuid::new_v4().to_string();
     tracing::info!("Creating profile: {} ({})", profile.name, id);
-    
+
+    profile.id = Some(id.clone());
+
+    // Store password securely if provided
+    if let Some(pwd) = password {
+        profile.store_password(&pwd)?;
+    }
+
     state.save_profile(id.clone(), profile).await?;
     Ok(id)
 }
@@ -24,11 +32,17 @@ pub async fn profile_create(
 pub async fn profile_update(
     state: State<'_, AppState>,
     profile: ProfileData,
+    password: Option<String>,
 ) -> Result<(), AppError> {
-    let id = profile.id.clone()
-        .ok_or(AppError::MissingProfileId)?;
-    
+    let id = profile.id.clone().ok_or(AppError::MissingProfileId)?;
+
     tracing::info!("Updating profile: {} ({})", profile.name, id);
+
+    // Update password if provided
+    if let Some(pwd) = password {
+        profile.store_password(&pwd)?;
+    }
+
     state.update_profile(id, profile).await
 }
 
@@ -39,14 +53,19 @@ pub async fn profile_delete(
     profile_id: String,
 ) -> Result<(), AppError> {
     tracing::info!("Deleting profile: {}", profile_id);
+
+    // Get profile to delete password from keyring
+    let profiles = state.list_profiles().await;
+    if let Some(profile) = profiles.iter().find(|p| p.id.as_ref() == Some(&profile_id)) {
+        profile.delete_password().ok(); // Ignore errors
+    }
+
     state.delete_profile(&profile_id).await
 }
 
 /// List all connection profiles
 #[tauri::command]
-pub async fn profile_list(
-    state: State<'_, AppState>,
-) -> Result<Vec<ProfileData>, AppError> {
+pub async fn profile_list(state: State<'_, AppState>) -> Result<Vec<ProfileData>, AppError> {
     // Load profiles from disk on first call
     state.load_profiles().await.ok();
     Ok(state.list_profiles().await)
@@ -58,7 +77,10 @@ pub async fn profile_export(
     state: State<'_, AppState>,
     include_credentials: bool,
 ) -> Result<String, AppError> {
-    tracing::info!("Exporting profiles (include_credentials: {})", include_credentials);
+    tracing::info!(
+        "Exporting profiles (include_credentials: {})",
+        include_credentials
+    );
     state.export_profiles(include_credentials).await
 }
 

@@ -7,7 +7,7 @@
 //! - Requirement 5.1: Content-addressed storage using BLAKE3
 //! - Requirement 5.4: Deterministic chunking
 
-use crate::encryption::hash::{ContentHash, hash_data};
+use crate::encryption::hash::{hash_data, ContentHash};
 use crate::error::VdfsError;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -104,7 +104,8 @@ impl ChunkStore {
     /// Retrieve a chunk by ID
     pub async fn get(&self, id: &ChunkId) -> Result<Chunk, VdfsError> {
         let chunks = self.chunks.read().await;
-        chunks.get(id)
+        chunks
+            .get(id)
             .cloned()
             .ok_or_else(|| VdfsError::ChunkNotFound(id.to_hex()))
     }
@@ -143,19 +144,22 @@ impl ChunkStore {
         let chunks = self.chunks.read().await;
         chunks.values().map(|c| c.size()).sum()
     }
-    
+
     /// Garbage collect unreferenced chunks
-    /// 
+    ///
     /// Removes all chunks that are not in the `referenced_ids` set.
     /// Returns the number of chunks removed and bytes freed.
-    /// 
+    ///
     /// # Memory Safety
     /// This method should be called periodically to prevent unbounded memory growth.
-    pub async fn garbage_collect(&self, referenced_ids: &std::collections::HashSet<ChunkId>) -> (usize, usize) {
+    pub async fn garbage_collect(
+        &self,
+        referenced_ids: &std::collections::HashSet<ChunkId>,
+    ) -> (usize, usize) {
         let mut chunks = self.chunks.write().await;
         let mut removed_count = 0;
         let mut freed_bytes = 0;
-        
+
         chunks.retain(|id, chunk| {
             if referenced_ids.contains(id) {
                 true
@@ -165,12 +169,12 @@ impl ChunkStore {
                 false
             }
         });
-        
+
         (removed_count, freed_bytes)
     }
-    
+
     /// Clear all chunks from the store
-    /// 
+    ///
     /// Returns the number of chunks removed and bytes freed.
     pub async fn clear(&self) -> (usize, usize) {
         let mut chunks = self.chunks.write().await;
@@ -193,9 +197,7 @@ pub fn chunk_data(data: &[u8], chunk_size: usize) -> Vec<Chunk> {
 
 /// Reassemble chunks into original data
 pub fn reassemble_chunks(chunks: &[Chunk]) -> Vec<u8> {
-    chunks.iter()
-        .flat_map(|c| c.data.iter().cloned())
-        .collect()
+    chunks.iter().flat_map(|c| c.data.iter().cloned()).collect()
 }
 
 #[cfg(test)]
@@ -206,7 +208,7 @@ mod tests {
     fn chunk_creation_and_verification() {
         let data = b"Hello, World!".to_vec();
         let chunk = Chunk::new(data.clone());
-        
+
         assert!(chunk.verify());
         assert_eq!(chunk.data, data);
         assert_eq!(chunk.size(), data.len());
@@ -217,19 +219,19 @@ mod tests {
         let data = b"Same data".to_vec();
         let chunk1 = Chunk::new(data.clone());
         let chunk2 = Chunk::new(data);
-        
+
         assert_eq!(chunk1.id, chunk2.id);
     }
 
     #[tokio::test]
     async fn chunk_store_basic_operations() {
         let store = ChunkStore::new();
-        
+
         let data = b"Test data".to_vec();
         let id = store.store_data(data.clone()).await;
-        
+
         assert!(store.contains(&id).await);
-        
+
         let retrieved = store.get(&id).await.unwrap();
         assert_eq!(retrieved.data, data);
     }
@@ -237,11 +239,11 @@ mod tests {
     #[tokio::test]
     async fn chunk_store_deduplication() {
         let store = ChunkStore::new();
-        
+
         let data = b"Duplicate data".to_vec();
         let id1 = store.store_data(data.clone()).await;
         let id2 = store.store_data(data).await;
-        
+
         assert_eq!(id1, id2);
         assert_eq!(store.len().await, 1);
     }
@@ -250,31 +252,31 @@ mod tests {
     fn chunking_and_reassembly() {
         let data = b"This is some test data that will be chunked".to_vec();
         let chunks = chunk_data(&data, 10);
-        
+
         assert_eq!(chunks.len(), 5); // 44 bytes / 10 = 5 chunks
-        
+
         let reassembled = reassemble_chunks(&chunks);
         assert_eq!(reassembled, data);
     }
-    
+
     #[tokio::test]
     async fn chunk_store_garbage_collection() {
         let store = ChunkStore::new();
-        
+
         // Store some chunks
         let id1 = store.store_data(b"chunk 1".to_vec()).await;
         let id2 = store.store_data(b"chunk 2".to_vec()).await;
         let id3 = store.store_data(b"chunk 3".to_vec()).await;
-        
+
         assert_eq!(store.len().await, 3);
-        
+
         // Only keep id1 and id3
         let mut referenced = std::collections::HashSet::new();
         referenced.insert(id1);
         referenced.insert(id3);
-        
+
         let (removed, freed) = store.garbage_collect(&referenced).await;
-        
+
         assert_eq!(removed, 1);
         assert!(freed > 0);
         assert_eq!(store.len().await, 2);
@@ -282,18 +284,18 @@ mod tests {
         assert!(!store.contains(&id2).await);
         assert!(store.contains(&id3).await);
     }
-    
+
     #[tokio::test]
     async fn chunk_store_clear() {
         let store = ChunkStore::new();
-        
+
         store.store_data(b"chunk 1".to_vec()).await;
         store.store_data(b"chunk 2".to_vec()).await;
-        
+
         assert_eq!(store.len().await, 2);
-        
+
         let (count, bytes) = store.clear().await;
-        
+
         assert_eq!(count, 2);
         assert!(bytes > 0);
         assert!(store.is_empty().await);

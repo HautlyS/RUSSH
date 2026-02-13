@@ -23,6 +23,7 @@ pub use command::{CommandResult, Shell};
 pub use forward::{PortForward, PortForwarder};
 pub use sftp::RemoteFileEntry;
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -46,7 +47,7 @@ pub struct SshConfig {
 }
 
 /// Host key checking policy
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum HostKeyCheck {
     /// Strict checking (reject unknown/changed keys)
     #[default]

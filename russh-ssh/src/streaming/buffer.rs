@@ -28,7 +28,7 @@ pub struct BufferConfig {
 impl Default for BufferConfig {
     fn default() -> Self {
         Self {
-            min_buffer_size: 64 * 1024,      // 64 KB
+            min_buffer_size: 64 * 1024,        // 64 KB
             max_buffer_size: 16 * 1024 * 1024, // 16 MB
             target_duration: Duration::from_secs(10),
             low_watermark: 256 * 1024,       // 256 KB
@@ -158,7 +158,7 @@ impl AdaptiveBuffer {
     }
 
     /// Add data to the buffer at a specific position
-    /// 
+    ///
     /// Memory safety: Evicts old data BEFORE adding new data to prevent memory spikes.
     /// The buffer will never exceed `max_buffer_size` even temporarily.
     pub fn add_data(&mut self, position: u64, data: Vec<u8>) {
@@ -167,25 +167,26 @@ impl AdaptiveBuffer {
         }
 
         let data_len = data.len();
-        
+
         // CRITICAL: Evict old data BEFORE adding new data to prevent memory spikes
         // This ensures we never exceed max_buffer_size even temporarily
         if self.total_buffered + data_len > self.config.max_buffer_size {
             self.evict_to_make_room(data_len);
         }
-        
+
         // If data is larger than max buffer size, truncate it
         let data = if data_len > self.config.max_buffer_size {
             tracing::warn!(
                 "Data chunk ({} bytes) exceeds max buffer size ({} bytes), truncating",
-                data_len, self.config.max_buffer_size
+                data_len,
+                self.config.max_buffer_size
             );
             data[..self.config.max_buffer_size].to_vec()
         } else {
             data
         };
         let actual_len = data.len();
-        
+
         // Check if this overlaps with existing ranges
         // For simplicity, we just add as a new range
         // A production implementation would merge overlapping ranges
@@ -197,14 +198,16 @@ impl AdaptiveBuffer {
         self.ranges.insert(position, range);
         self.total_buffered += actual_len;
     }
-    
+
     /// Evict data to make room for new data
     fn evict_to_make_room(&mut self, needed_space: usize) {
         let target_size = self.config.max_buffer_size.saturating_sub(needed_space);
-        
+
         while self.total_buffered > target_size {
             // Remove the oldest range that's before the read position first
-            let to_remove = self.ranges.iter()
+            let to_remove = self
+                .ranges
+                .iter()
                 .filter(|(_, r)| r.end() <= self.read_position)
                 .map(|(k, r)| (*k, r.data.len()))
                 .next();
@@ -230,28 +233,27 @@ impl AdaptiveBuffer {
     /// Returns the data if available, or None if the position is not buffered.
     pub fn read(&mut self, len: usize) -> Option<Vec<u8>> {
         let pos = self.read_position;
-        
+
         // Find the range containing this position
-        let range = self.ranges.iter()
-            .find(|(_, r)| r.contains(pos))?;
-        
+        let range = self.ranges.iter().find(|(_, r)| r.contains(pos))?;
+
         let range_start = *range.0;
         let range_data = &range.1.data;
-        
+
         // Calculate offset within the range
         let offset = (pos - range_start) as usize;
         let available = range_data.len() - offset;
         let to_read = len.min(available);
-        
+
         let data = range_data[offset..offset + to_read].to_vec();
-        
+
         // Update position
         self.read_position += to_read as u64;
         self.bytes_consumed += to_read;
-        
+
         // Adapt buffer size based on consumption
         self.adapt_buffer_size();
-        
+
         Some(data)
     }
 
@@ -267,7 +269,7 @@ impl AdaptiveBuffer {
         }
 
         self.read_position = position;
-        
+
         // Check if position is buffered
         self.ranges.iter().any(|(_, r)| r.contains(position))
     }
@@ -294,11 +296,10 @@ impl AdaptiveBuffer {
         // Simple adaptation: increase target if consuming fast
         // Make this configurable via BufferConfig
         let adaptation_threshold = self.config.high_watermark / 8; // 1/8 of high watermark
-        
+
         if self.bytes_consumed >= adaptation_threshold {
             // Increase adaptive target
-            self.adaptive_target = (self.adaptive_target * 3 / 2)
-                .min(self.config.max_buffer_size);
+            self.adaptive_target = (self.adaptive_target * 3 / 2).min(self.config.max_buffer_size);
             self.bytes_consumed = 0;
         }
     }
@@ -319,7 +320,7 @@ mod tests {
     fn adaptive_buffer_basic() {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let buffer = AdaptiveBuffer::new(config);
-        
+
         assert_eq!(buffer.position(), 0);
         assert_eq!(buffer.buffered_bytes(), 0);
         assert!(buffer.needs_data());
@@ -329,12 +330,12 @@ mod tests {
     fn adaptive_buffer_add_and_read() {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let mut buffer = AdaptiveBuffer::new(config);
-        
+
         let data = vec![1, 2, 3, 4, 5];
         buffer.add_data(0, data.clone());
-        
+
         assert_eq!(buffer.buffered_bytes(), 5);
-        
+
         let read = buffer.read(3).unwrap();
         assert_eq!(read, vec![1, 2, 3]);
         assert_eq!(buffer.position(), 3);
@@ -343,20 +344,19 @@ mod tests {
     #[test]
     fn adaptive_buffer_seek() {
         let config = BufferConfig::new(1024, 1024 * 1024);
-        let buffer = AdaptiveBuffer::new(config)
-            .with_stream_size(100);
-        
+        let buffer = AdaptiveBuffer::new(config).with_stream_size(100);
+
         // Need to make it mutable for add_data and seek
         let mut buffer = buffer;
         buffer.add_data(0, vec![0; 50]);
         buffer.add_data(50, vec![0; 50]);
-        
+
         assert!(buffer.seek(25));
         assert_eq!(buffer.position(), 25);
-        
+
         assert!(buffer.seek(75));
         assert_eq!(buffer.position(), 75);
-        
+
         // Out of bounds
         assert!(!buffer.seek(150));
     }
@@ -365,10 +365,10 @@ mod tests {
     fn adaptive_buffer_ranges() {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let mut buffer = AdaptiveBuffer::new(config);
-        
+
         buffer.add_data(0, vec![0; 100]);
         buffer.add_data(200, vec![0; 100]);
-        
+
         let ranges = buffer.buffered_ranges();
         assert_eq!(ranges.len(), 2);
         assert!(buffer.is_buffered(50));

@@ -5,17 +5,17 @@
 //! # Requirements Coverage
 //! - Requirement 1.2: Password and key-based authentication methods
 
-use super::{SshConfig, AuthMethod, HostKeyCheck};
-use crate::error::{SshError, ConnectionError};
-use async_ssh2_tokio::client::{Client, AuthMethod as SshAuthMethod, ServerCheckMethod};
+use super::{AuthMethod, HostKeyCheck, SshConfig};
+use crate::error::{ConnectionError, SshError};
+use async_ssh2_tokio::client::{AuthMethod as SshAuthMethod, Client, ServerCheckMethod};
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 
-use std::collections::HashMap;
-use uuid::Uuid;
-use tokio::task::AbortHandle;
-use tokio::sync::RwLock;
 use super::forward::ForwardHandle;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
+use tokio::task::AbortHandle;
+use uuid::Uuid;
 
 type ForwardsMap = HashMap<Uuid, (Arc<ForwardHandle>, AbortHandle)>;
 
@@ -54,15 +54,16 @@ impl SshClient {
     /// - Requirement 1.2: Support password and key-based authentication methods
     pub async fn connect(&mut self, config: &SshConfig) -> Result<(), SshError> {
         let addr = format!("{}:{}", config.host, config.port);
-        let socket_addr = addr.to_socket_addrs()
-            .map_err(|e| ConnectionError::DnsResolution { 
-                host: config.host.clone(), 
-                reason: e.to_string() 
+        let socket_addr = addr
+            .to_socket_addrs()
+            .map_err(|e| ConnectionError::DnsResolution {
+                host: config.host.clone(),
+                reason: e.to_string(),
             })?
             .next()
-            .ok_or_else(|| ConnectionError::DnsResolution { 
-                host: config.host.clone(), 
-                reason: "No address found".to_string() 
+            .ok_or_else(|| ConnectionError::DnsResolution {
+                host: config.host.clone(),
+                reason: "No address found".to_string(),
             })?;
 
         tracing::info!("Connecting to SSH server at {}", addr);
@@ -73,7 +74,10 @@ impl SshClient {
                 tracing::debug!("Using password authentication");
                 SshAuthMethod::with_password(password)
             }
-            AuthMethod::PublicKey { key_path, passphrase } => {
+            AuthMethod::PublicKey {
+                key_path,
+                passphrase,
+            } => {
                 tracing::debug!("Using public key authentication with key: {:?}", key_path);
                 SshAuthMethod::with_key_file(key_path, passphrase.as_deref())
             }
@@ -87,44 +91,42 @@ impl SshClient {
             }
         };
 
-
         let check_method = match config.host_key_check {
             HostKeyCheck::Strict => {
                 if let Some(path) = &config.known_hosts_path {
                     ServerCheckMethod::with_known_hosts_file(&path.to_string_lossy())
                 } else {
-                    tracing::warn!("Strict host key checking requested but no known_hosts path provided. Defaulting to NoCheck.");
-                    ServerCheckMethod::NoCheck
+                    return Err(SshError::AuthenticationFailed {
+                        user: config.username.clone(),
+                        reason: "Strict host key checking requires known_hosts path".to_string(),
+                    });
                 }
             }
             HostKeyCheck::AcceptNew => {
-                 // For now, async-ssh2-tokio might not directly support "AcceptNew" in the same way OpenSSH does via a simple enum.
-                 // It usually supports KnownHosts or NoCheck. 
-                 // If we want "Accept New", we might need a custom check or just use KnownHosts and handle the error if we could, 
-                 // but for simplicity/safety in this pass, we will treat it similarly to Strict if a path is present, 
-                 // effectively relying on the library's behavior for known hosts.
-                 // verifying the library documentation or behavior would be ideal, but for now:
-                 if let Some(path) = &config.known_hosts_path {
-                     ServerCheckMethod::with_known_hosts_file(&path.to_string_lossy())
-                 } else {
-                     ServerCheckMethod::NoCheck
-                 }
+                if let Some(path) = &config.known_hosts_path {
+                    ServerCheckMethod::with_known_hosts_file(&path.to_string_lossy())
+                } else {
+                    return Err(SshError::AuthenticationFailed {
+                        user: config.username.clone(),
+                        reason: "AcceptNew host key checking requires known_hosts path".to_string(),
+                    });
+                }
             }
-            HostKeyCheck::None => ServerCheckMethod::NoCheck,
+            HostKeyCheck::None => {
+                tracing::warn!("Host key verification disabled - INSECURE, only use for testing");
+                ServerCheckMethod::NoCheck
+            }
         };
 
-        let client = Client::connect(
-            socket_addr,
-            &config.username,
-            auth_method,
-            check_method,
-        ).await.map_err(|e| SshError::AuthenticationFailed { 
-            user: config.username.clone(), 
-            reason: e.to_string() 
-        })?;
+        let client = Client::connect(socket_addr, &config.username, auth_method, check_method)
+            .await
+            .map_err(|e| SshError::AuthenticationFailed {
+                user: config.username.clone(),
+                reason: e.to_string(),
+            })?;
 
         tracing::info!("SSH authentication successful for user {}", config.username);
-        
+
         self.client = Some(client);
         self.config = Some(config.clone());
         Ok(())
@@ -132,7 +134,10 @@ impl SshClient {
 
     /// Check if connected
     pub fn is_connected(&self) -> bool {
-        self.client.as_ref().map(|c| !c.is_closed()).unwrap_or(false)
+        self.client
+            .as_ref()
+            .map(|c| !c.is_closed())
+            .unwrap_or(false)
     }
 
     /// Get the current configuration
@@ -147,7 +152,7 @@ impl SshClient {
             let forwards = self.forwards.read().await;
             forwards.keys().cloned().collect()
         };
-        
+
         for id in forward_ids {
             let mut forwards = self.forwards.write().await;
             if let Some((_, abort_handle)) = forwards.remove(&id) {
@@ -156,15 +161,16 @@ impl SshClient {
         }
 
         if let Some(client) = self.client.take() {
-            client.disconnect().await.map_err(|e| {
-                SshError::CommandExecution(format!("Disconnect failed: {}", e))
-            })?;
+            client
+                .disconnect()
+                .await
+                .map_err(|e| SshError::CommandExecution(format!("Disconnect failed: {}", e)))?;
             tracing::info!("Disconnected from SSH server");
         }
         self.config = None;
         Ok(())
     }
-    
+
     /// Get reference to inner client
     pub(crate) fn inner(&self) -> Option<&Client> {
         self.client.as_ref()

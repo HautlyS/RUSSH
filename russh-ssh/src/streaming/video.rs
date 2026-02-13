@@ -39,7 +39,11 @@ pub enum StreamSource {
     /// Local file (host only)
     LocalFile { path: String, size: u64 },
     /// P2P shared file
-    P2PFile { host_id: String, file_id: String, size: u64 },
+    P2PFile {
+        host_id: String,
+        file_id: String,
+        size: u64,
+    },
 }
 
 /// Playback state for synchronization
@@ -109,7 +113,7 @@ impl StreamSession {
     pub fn create_room(name: String, source: StreamSource, host_id: String) -> Self {
         let room_id = Uuid::new_v4().to_string();
         let (event_tx, _) = broadcast::channel(100);
-        
+
         let room = StreamRoom {
             room_id: room_id.clone(),
             name,
@@ -119,7 +123,7 @@ impl StreamSession {
             peers: vec![],
             created_at: chrono::Utc::now().timestamp(),
         };
-        
+
         Self {
             session_id: room_id,
             room: Arc::new(RwLock::new(room)),
@@ -133,7 +137,7 @@ impl StreamSession {
     pub fn join_room(room: StreamRoom) -> Self {
         let (event_tx, _) = broadcast::channel(100);
         let session_id = room.room_id.clone();
-        
+
         Self {
             session_id,
             room: Arc::new(RwLock::new(room)),
@@ -170,8 +174,10 @@ impl StreamSession {
         let mut room = self.room.write().await;
         room.playback.playing = true;
         room.playback.sync_time = chrono::Utc::now().timestamp_millis();
-        
-        let event = SyncEvent::Play { position: room.playback.position };
+
+        let event = SyncEvent::Play {
+            position: room.playback.position,
+        };
         self.broadcast_event(event).await
     }
 
@@ -180,8 +186,10 @@ impl StreamSession {
         let mut room = self.room.write().await;
         room.playback.playing = false;
         room.playback.sync_time = chrono::Utc::now().timestamp_millis();
-        
-        let event = SyncEvent::Pause { position: room.playback.position };
+
+        let event = SyncEvent::Pause {
+            position: room.playback.position,
+        };
         self.broadcast_event(event).await
     }
 
@@ -190,7 +198,7 @@ impl StreamSession {
         let mut room = self.room.write().await;
         room.playback.position = position;
         room.playback.sync_time = chrono::Utc::now().timestamp_millis();
-        
+
         let event = SyncEvent::Seek { position };
         self.broadcast_event(event).await
     }
@@ -206,7 +214,7 @@ impl StreamSession {
         let mut room = self.room.write().await;
         room.playback.speed = speed;
         room.playback.sync_time = chrono::Utc::now().timestamp_millis();
-        
+
         let event = SyncEvent::Speed { speed };
         self.broadcast_event(event).await
     }
@@ -214,13 +222,15 @@ impl StreamSession {
     /// Change source
     pub async fn change_source(&self, source: StreamSource) -> Result<(), StreamError> {
         if !self.is_host {
-            return Err(StreamError::NotFound("Only host can change source".to_string()));
+            return Err(StreamError::NotFound(
+                "Only host can change source".to_string(),
+            ));
         }
-        
+
         let mut room = self.room.write().await;
         room.source = source.clone();
         room.playback = PlaybackState::default();
-        
+
         let event = SyncEvent::SourceChanged { source };
         self.broadcast_event(event).await
     }
@@ -267,7 +277,9 @@ impl StreamSession {
             SyncEvent::RequestSync => {
                 if self.is_host {
                     let room = self.room.read().await;
-                    let sync_event = SyncEvent::StateSync { state: room.playback.clone() };
+                    let sync_event = SyncEvent::StateSync {
+                        state: room.playback.clone(),
+                    };
                     self.broadcast_event(sync_event).await?;
                 }
             }
@@ -276,7 +288,7 @@ impl StreamSession {
                 room.playback = state.clone();
             }
         }
-        
+
         // Re-broadcast to local subscribers
         let _ = self.event_tx.send(event);
         Ok(())
@@ -286,10 +298,10 @@ impl StreamSession {
     async fn broadcast_event(&self, event: SyncEvent) -> Result<(), StreamError> {
         // Send to local subscribers
         let _ = self.event_tx.send(event.clone());
-        
+
         // TODO: Send to P2P peers via connection manager
         // This would serialize the event and send over QUIC streams
-        
+
         Ok(())
     }
 
@@ -304,11 +316,11 @@ impl StreamSession {
         if !room.playback.playing {
             return room.playback.position;
         }
-        
+
         let now = chrono::Utc::now().timestamp_millis();
         let elapsed_ms = (now - room.playback.sync_time) as f64;
         let elapsed_secs = elapsed_ms / 1000.0;
-        
+
         room.playback.position + (elapsed_secs * room.playback.speed)
     }
 }
@@ -326,21 +338,18 @@ pub struct HttpVideoStream {
 impl HttpVideoStream {
     /// Create a new HTTP video stream
     pub async fn new(url: &str) -> Result<Self, StreamError> {
-        use stream_download::{Settings, StreamDownload};
         use stream_download::storage::temp::TempStorageProvider;
-        
-        let url = url.parse().map_err(|e| {
-            StreamError::NotFound(format!("Invalid URL: {}", e))
-        })?;
-        
-        let reader = StreamDownload::new_http(
-            url,
-            TempStorageProvider::default(),
-            Settings::default(),
-        ).await.map_err(|e| {
-            StreamError::NotFound(format!("Failed to create stream: {:?}", e))
-        })?;
-        
+        use stream_download::{Settings, StreamDownload};
+
+        let url = url
+            .parse()
+            .map_err(|e| StreamError::NotFound(format!("Invalid URL: {}", e)))?;
+
+        let reader =
+            StreamDownload::new_http(url, TempStorageProvider::default(), Settings::default())
+                .await
+                .map_err(|e| StreamError::NotFound(format!("Failed to create stream: {:?}", e)))?;
+
         Ok(Self {
             reader,
             content_length: None,
@@ -385,29 +394,34 @@ mod tests {
 
     #[test]
     fn stream_room_creation() {
-        let source = StreamSource::Url { url: "https://example.com/video.mp4".to_string() };
-        let session = StreamSession::create_room("Test Room".to_string(), source, "host123".to_string());
-        
+        let source = StreamSource::Url {
+            url: "https://example.com/video.mp4".to_string(),
+        };
+        let session =
+            StreamSession::create_room("Test Room".to_string(), source, "host123".to_string());
+
         assert!(session.is_host);
         assert!(!session.session_id.is_empty());
     }
 
     #[tokio::test]
     async fn stream_session_playback() {
-        let source = StreamSource::Url { url: "https://example.com/video.mp4".to_string() };
+        let source = StreamSource::Url {
+            url: "https://example.com/video.mp4".to_string(),
+        };
         let session = StreamSession::create_room("Test".to_string(), source, "host".to_string());
-        
+
         // Subscribe before events
         let mut rx = session.subscribe();
-        
+
         session.play().await.unwrap();
         let state = session.playback_state().await;
         assert!(state.playing);
-        
+
         session.seek(30.0).await.unwrap();
         let state = session.playback_state().await;
         assert_eq!(state.position, 30.0);
-        
+
         session.pause().await.unwrap();
         let state = session.playback_state().await;
         assert!(!state.playing);
@@ -418,7 +432,7 @@ mod tests {
         let event = SyncEvent::Play { position: 10.5 };
         let json = serde_json::to_string(&event).unwrap();
         let restored: SyncEvent = serde_json::from_str(&json).unwrap();
-        
+
         match restored {
             SyncEvent::Play { position } => assert_eq!(position, 10.5),
             _ => panic!("Wrong event type"),

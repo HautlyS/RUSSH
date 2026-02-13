@@ -1,13 +1,29 @@
 //! Application state management
 
+use chrono::{DateTime, Utc};
+use russh_ssh::p2p::{P2PConnectionManager, P2PEndpoint};
+use russh_ssh::ssh::SshClient;
+use russh_ssh::streaming::StreamSession;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+use super::session_state::{SessionInfo, SessionState};
 use crate::error::AppError;
-use super::session_state::{SessionState, SessionInfo};
+
+/// Session snapshot for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SessionSnapshot {
+    session_id: String,
+    profile_id: Option<String>,
+    host: String,
+    username: String,
+    port: u16,
+    connected_at: DateTime<Utc>,
+}
 
 /// Profile data for saved connections
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -26,6 +42,56 @@ pub struct ProfileData {
     #[serde(default)]
     pub use_count: u32,
     pub last_connected: Option<String>,
+}
+
+impl ProfileData {
+    /// Store password securely in system keyring
+    pub fn store_password(&self, password: &str) -> Result<(), AppError> {
+        if let Some(id) = &self.id {
+            let entry = keyring::Entry::new("russh", id)
+                .map_err(|e| AppError::InternalError(format!("Keyring error: {}", e)))?;
+            entry
+                .set_password(password)
+                .map_err(|e| AppError::InternalError(format!("Failed to store password: {}", e)))?;
+        }
+        Ok(())
+    }
+
+    /// Retrieve password from system keyring
+    pub fn get_password(&self) -> Result<Option<String>, AppError> {
+        if let Some(id) = &self.id {
+            let entry = keyring::Entry::new("russh", id)
+                .map_err(|e| AppError::InternalError(format!("Keyring error: {}", e)))?;
+            match entry.get_password() {
+                Ok(pwd) => Ok(Some(pwd)),
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(e) => Err(AppError::InternalError(format!(
+                    "Failed to retrieve password: {}",
+                    e
+                ))),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Delete password from system keyring
+    pub fn delete_password(&self) -> Result<(), AppError> {
+        if let Some(id) = &self.id {
+            let entry = keyring::Entry::new("russh", id)
+                .map_err(|e| AppError::InternalError(format!("Keyring error: {}", e)))?;
+            match entry.delete_password() {
+                Ok(()) => Ok(()),
+                Err(keyring::Error::NoEntry) => Ok(()), // Already deleted
+                Err(e) => Err(AppError::InternalError(format!(
+                    "Failed to delete password: {}",
+                    e
+                ))),
+            }
+        } else {
+            Ok(())
+        }
+    }
 }
 
 /// Application settings
@@ -124,7 +190,7 @@ impl Default for KeyboardSettings {
         shortcuts.insert("commandPalette".to_string(), "Ctrl+K".to_string());
         shortcuts.insert("settings".to_string(), "Ctrl+,".to_string());
         shortcuts.insert("toggleSidebar".to_string(), "Ctrl+B".to_string());
-        
+
         Self {
             shortcuts,
             enable_global_shortcuts: false,
@@ -186,7 +252,8 @@ pub struct AppState {
     /// P2P connection manager
     p2p_manager: Arc<RwLock<Option<std::sync::Arc<russh_ssh::p2p::P2PConnectionManager>>>>,
     /// Stream sessions
-    stream_sessions: Arc<RwLock<HashMap<String, std::sync::Arc<russh_ssh::streaming::StreamSession>>>>,
+    stream_sessions:
+        Arc<RwLock<HashMap<String, std::sync::Arc<russh_ssh::streaming::StreamSession>>>>,
     /// Data directory path
     data_dir: PathBuf,
 }
@@ -196,10 +263,10 @@ impl AppState {
         let data_dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("russh-client");
-        
+
         // Create data directory if it doesn't exist
         std::fs::create_dir_all(&data_dir).ok();
-        
+
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             profiles: Arc::new(RwLock::new(HashMap::new())),
@@ -223,7 +290,10 @@ impl AppState {
         sessions.get(session_id).map(|s| s.info.clone())
     }
 
-    pub async fn get_session_client(&self, session_id: &str) -> Option<std::sync::Arc<tokio::sync::Mutex<russh_ssh::ssh::SshClient>>> {
+    pub async fn get_session_client(
+        &self,
+        session_id: &str,
+    ) -> Option<std::sync::Arc<tokio::sync::Mutex<russh_ssh::ssh::SshClient>>> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id).map(|s| s.client.clone())
     }
@@ -239,7 +309,8 @@ impl AppState {
     #[allow(dead_code)]
     pub async fn set_session_connected(&self, session_id: &str) -> Result<(), AppError> {
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(session_id)
+        let session = sessions
+            .get_mut(session_id)
             .ok_or_else(|| AppError::SessionNotFound(session_id.to_string()))?;
         session.set_connected();
         Ok(())
@@ -255,9 +326,14 @@ impl AppState {
         }
     }
 
-    pub async fn get_terminal_input_tx(&self, session_id: &str) -> Option<tokio::sync::mpsc::Sender<Vec<u8>>> {
+    pub async fn get_terminal_input_tx(
+        &self,
+        session_id: &str,
+    ) -> Option<tokio::sync::mpsc::Sender<Vec<u8>>> {
         let sessions = self.sessions.read().await;
-        sessions.get(session_id).and_then(|s| s.terminal_input_tx.clone())
+        sessions
+            .get(session_id)
+            .and_then(|s| s.terminal_input_tx.clone())
     }
 
     pub async fn list_sessions(&self) -> Vec<SessionInfo> {
@@ -268,10 +344,10 @@ impl AppState {
     // Profile management
     pub async fn save_profile(&self, id: String, mut profile: ProfileData) -> Result<(), AppError> {
         profile.id = Some(id.clone());
-        
+
         let mut profiles = self.profiles.write().await;
         profiles.insert(id, profile);
-        
+
         self.persist_profiles(&profiles).await?;
         Ok(())
     }
@@ -282,16 +358,17 @@ impl AppState {
             return Err(AppError::ProfileNotFound(id));
         }
         profiles.insert(id, profile);
-        
+
         self.persist_profiles(&profiles).await?;
         Ok(())
     }
 
     pub async fn delete_profile(&self, id: &str) -> Result<(), AppError> {
         let mut profiles = self.profiles.write().await;
-        profiles.remove(id)
+        profiles
+            .remove(id)
             .ok_or_else(|| AppError::ProfileNotFound(id.to_string()))?;
-        
+
         self.persist_profiles(&profiles).await?;
         Ok(())
     }
@@ -312,16 +389,31 @@ impl AppState {
         Ok(())
     }
 
-    async fn persist_profiles(&self, profiles: &HashMap<String, ProfileData>) -> Result<(), AppError> {
+    async fn persist_profiles(
+        &self,
+        profiles: &HashMap<String, ProfileData>,
+    ) -> Result<(), AppError> {
         let path = self.data_dir.join("profiles.json");
         let content = serde_json::to_string_pretty(profiles)?;
-        std::fs::write(path, content)?;
+        std::fs::write(&path, content)?;
+
+        // Set secure file permissions on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = std::fs::metadata(&path)?;
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(0o600); // rw-------
+            std::fs::set_permissions(&path, permissions)?;
+        }
+
         Ok(())
     }
 
     pub async fn export_profiles(&self, include_credentials: bool) -> Result<String, AppError> {
         let profiles = self.profiles.read().await;
-        let export_profiles: Vec<ProfileData> = profiles.values()
+        let export_profiles: Vec<ProfileData> = profiles
+            .values()
             .map(|p| {
                 let mut profile = p.clone();
                 if !include_credentials {
@@ -330,23 +422,78 @@ impl AppState {
                 profile
             })
             .collect();
-        
+
         Ok(serde_json::to_string_pretty(&export_profiles)?)
     }
 
     pub async fn import_profiles(&self, json_data: &str) -> Result<usize, AppError> {
         let import_profiles: Vec<ProfileData> = serde_json::from_str(json_data)?;
         let count = import_profiles.len();
-        
+
         let mut profiles = self.profiles.write().await;
         for mut profile in import_profiles {
-            let id = profile.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
+            let id = profile
+                .id
+                .clone()
+                .unwrap_or_else(|| Uuid::new_v4().to_string());
             profile.id = Some(id.clone());
             profiles.insert(id, profile);
         }
-        
+
         self.persist_profiles(&profiles).await?;
         Ok(count)
+    }
+
+    // Session persistence
+    pub async fn save_active_sessions(&self) -> Result<(), AppError> {
+        let sessions = self.sessions.read().await;
+        let snapshots: Vec<SessionSnapshot> = sessions
+            .iter()
+            .filter(|(_, s)| matches!(s.status, super::session_state::SessionStatus::Connected))
+            .map(|(id, s)| SessionSnapshot {
+                session_id: id.clone(),
+                profile_id: None,
+                host: s.info.host.clone(),
+                username: s.info.username.clone(),
+                port: 22,
+                connected_at: s.info.connected_at,
+            })
+            .collect();
+
+        if !snapshots.is_empty() {
+            let path = self.data_dir.join("active_sessions.json");
+            let content = serde_json::to_string_pretty(&snapshots)?;
+            std::fs::write(&path, content)?;
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let metadata = std::fs::metadata(&path)?;
+                let mut permissions = metadata.permissions();
+                permissions.set_mode(0o600);
+                std::fs::set_permissions(&path, permissions)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn restore_sessions(&self) -> Result<Vec<String>, AppError> {
+        let path = self.data_dir.join("active_sessions.json");
+        if !path.exists() {
+            return Ok(vec![]);
+        }
+
+        let content = std::fs::read_to_string(&path)?;
+        let snapshots: Vec<SessionSnapshot> = serde_json::from_str(&content)?;
+
+        tracing::info!("Found {} sessions to restore", snapshots.len());
+
+        // Clean up the file after reading
+        std::fs::remove_file(&path).ok();
+
+        // Return session IDs for manual reconnection
+        Ok(snapshots.iter().map(|s| s.session_id.clone()).collect())
     }
 
     // Settings management
@@ -367,14 +514,19 @@ impl AppState {
         let path = self.data_dir.join("settings.json");
         let content = serde_json::to_string_pretty(&settings)?;
         std::fs::write(path, content)?;
-        
+
         let mut state_settings = self.settings.write().await;
         *state_settings = settings;
         Ok(())
     }
 
     // P2P management
-    pub async fn get_p2p_state(&self) -> Option<(std::sync::Arc<russh_ssh::p2p::P2PEndpoint>, std::sync::Arc<russh_ssh::p2p::P2PConnectionManager>)> {
+    pub async fn get_p2p_state(
+        &self,
+    ) -> Option<(
+        std::sync::Arc<russh_ssh::p2p::P2PEndpoint>,
+        std::sync::Arc<russh_ssh::p2p::P2PConnectionManager>,
+    )> {
         let endpoint = self.p2p_endpoint.read().await;
         let manager = self.p2p_manager.read().await;
         match (endpoint.as_ref(), manager.as_ref()) {
@@ -399,7 +551,8 @@ impl AppState {
 
     pub async fn remove_p2p_peer(&self, peer_id: &str) -> Result<(), AppError> {
         let mut peers = self.p2p_peers.write().await;
-        peers.remove(peer_id)
+        peers
+            .remove(peer_id)
             .ok_or_else(|| AppError::PeerNotFound(peer_id.to_string()))?;
         Ok(())
     }
@@ -410,12 +563,19 @@ impl AppState {
     }
 
     // Stream session management
-    pub async fn add_stream_session(&self, room_id: String, session: std::sync::Arc<russh_ssh::streaming::StreamSession>) {
+    pub async fn add_stream_session(
+        &self,
+        room_id: String,
+        session: std::sync::Arc<russh_ssh::streaming::StreamSession>,
+    ) {
         let mut sessions = self.stream_sessions.write().await;
         sessions.insert(room_id, session);
     }
 
-    pub async fn get_stream_session(&self, room_id: &str) -> Option<std::sync::Arc<russh_ssh::streaming::StreamSession>> {
+    pub async fn get_stream_session(
+        &self,
+        room_id: &str,
+    ) -> Option<std::sync::Arc<russh_ssh::streaming::StreamSession>> {
         let sessions = self.stream_sessions.read().await;
         sessions.get(room_id).cloned()
     }

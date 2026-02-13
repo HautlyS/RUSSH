@@ -9,7 +9,10 @@
 
 use crate::error::P2PError;
 use crate::p2p::endpoint::{P2PEndpoint, RUSSH_ALPN};
-use iroh::{endpoint::{Connection, ConnectionType as IrohConnectionType}, NodeAddr, NodeId};
+use iroh::{
+    endpoint::{Connection, ConnectionType as IrohConnectionType},
+    NodeAddr, NodeId,
+};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -111,12 +114,12 @@ impl P2PConnection {
     }
 
     /// Update connection type based on current state
-    /// 
+    ///
     /// Uses the Endpoint's conn_type() method to get the connection type
     /// for this peer, as Iroh tracks connection types at the endpoint level.
     pub async fn update_connection_type(&self) {
         let mut info = self.info.write().await;
-        
+
         // Get connection type from the endpoint (Iroh tracks this at endpoint level)
         if let Ok(conn_type_watcher) = self.endpoint.endpoint().conn_type(self.peer_id) {
             if let Ok(conn_type) = conn_type_watcher.get() {
@@ -213,7 +216,9 @@ impl P2PConnectionManager {
         tracing::info!(peer_id = %peer_id, "Connecting to peer");
 
         // Connect using discovery
-        let connection = self.endpoint.endpoint()
+        let connection = self
+            .endpoint
+            .endpoint()
             .connect(peer_id, RUSSH_ALPN)
             .await
             .map_err(|e| P2PError::ConnectionFailed {
@@ -221,8 +226,12 @@ impl P2PConnectionManager {
                 reason: e.to_string(),
             })?;
 
-        let p2p_conn = Arc::new(P2PConnection::new(connection, peer_id, self.endpoint.clone()));
-        
+        let p2p_conn = Arc::new(P2PConnection::new(
+            connection,
+            peer_id,
+            self.endpoint.clone(),
+        ));
+
         // Update connection info
         p2p_conn.update_connection_type().await;
         p2p_conn.measure_latency().await;
@@ -265,7 +274,9 @@ impl P2PConnectionManager {
             "Connecting to peer with address"
         );
 
-        let connection = self.endpoint.endpoint()
+        let connection = self
+            .endpoint
+            .endpoint()
             .connect(addr, RUSSH_ALPN)
             .await
             .map_err(|e| P2PError::ConnectionFailed {
@@ -273,7 +284,11 @@ impl P2PConnectionManager {
                 reason: e.to_string(),
             })?;
 
-        let p2p_conn = Arc::new(P2PConnection::new(connection, peer_id, self.endpoint.clone()));
+        let p2p_conn = Arc::new(P2PConnection::new(
+            connection,
+            peer_id,
+            self.endpoint.clone(),
+        ));
         p2p_conn.update_connection_type().await;
         p2p_conn.measure_latency().await;
 
@@ -346,7 +361,7 @@ mod tests {
     fn connection_info_new() {
         let node_id = iroh::SecretKey::generate(rand::rngs::OsRng).public();
         let info = P2PConnectionInfo::new(node_id);
-        
+
         assert_eq!(info.peer_id, node_id);
         assert_eq!(info.connection_type, ConnectionType::Unknown);
         assert!(info.latency.is_none());
@@ -358,7 +373,7 @@ mod tests {
     fn connection_info_uptime() {
         let node_id = iroh::SecretKey::generate(rand::rngs::OsRng).public();
         let info = P2PConnectionInfo::new(node_id);
-        
+
         std::thread::sleep(std::time::Duration::from_millis(10));
         assert!(info.uptime() >= std::time::Duration::from_millis(10));
     }

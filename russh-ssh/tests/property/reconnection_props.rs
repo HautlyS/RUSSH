@@ -3,8 +3,8 @@
 //! Feature: russh-ssh
 //! These tests validate the correctness properties of the reconnection strategy.
 
-use russh_ssh::config::ReconnectionStrategy;
 use proptest::prelude::*;
+use russh_ssh::config::ReconnectionStrategy;
 use std::time::Duration;
 
 proptest! {
@@ -181,7 +181,6 @@ proptest! {
     }
 }
 
-
 // Additional tests for Property 2: Max Reconnection Attempts Enforcement
 
 /// Feature: russh-ssh, Property 2: Max Reconnection Attempts Enforcement
@@ -193,9 +192,9 @@ proptest! {
 /// **Validates: Requirements 2.2**
 #[cfg(test)]
 mod max_attempts_tests {
+    use proptest::prelude::*;
     use russh_ssh::config::ReconnectionStrategy;
     use russh_ssh::connection::ReconnectionController;
-    use proptest::prelude::*;
     use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
     use std::time::Duration;

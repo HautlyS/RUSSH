@@ -7,6 +7,10 @@ license = "MIT"
 repository = ""
 edition = "2021"
 
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+
 [build-dependencies]
 tauri-build = { version = "2.0", features = [] }
 
@@ -46,6 +50,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 qrcode = "0.14"
 image = "0.25"
 base64 = "0.22"
+
+# Secure credential storage
+keyring = "2.3"
 
 # Local russh-ssh library
 russh-ssh = { path = "../../russh-ssh" }

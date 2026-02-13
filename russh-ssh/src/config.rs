@@ -3,6 +3,7 @@
 //! This module defines configuration structs for connections,
 //! reconnection strategies, and other configurable behaviors.
 
+use crate::ssh::HostKeyCheck;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -125,11 +126,11 @@ impl ReconnectionStrategy {
     pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
         // Cap the exponent to prevent overflow (2^10 = 1024 is reasonable)
         let capped_attempt = attempt.min(10);
-        
+
         // Calculate exponential delay: base_delay * 2^attempt
         let multiplier = 2u32.saturating_pow(capped_attempt);
         let exponential = self.base_delay.saturating_mul(multiplier);
-        
+
         // Cap at max_delay
         let capped = if exponential > self.max_delay {
             self.max_delay
@@ -184,6 +185,10 @@ pub struct SshConfig {
     pub username: String,
     /// Authentication method
     pub auth: AuthMethod,
+    /// Host key verification mode
+    pub host_key_check: HostKeyCheck,
+    /// Path to known_hosts file
+    pub known_hosts_path: Option<PathBuf>,
     /// Connection timeout
     #[serde(with = "duration_serde")]
     pub timeout: Duration,
@@ -197,11 +202,15 @@ impl SshConfig {
         username: impl Into<String>,
         password: impl Into<String>,
     ) -> Self {
+        let known_hosts = dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts"));
+
         Self {
             host: host.into(),
             port,
             username: username.into(),
             auth: AuthMethod::Password(password.into()),
+            host_key_check: HostKeyCheck::Strict,
+            known_hosts_path: known_hosts,
             timeout: Duration::from_secs(30),
         }
     }
@@ -214,6 +223,8 @@ impl SshConfig {
         key_path: impl Into<PathBuf>,
         passphrase: Option<String>,
     ) -> Self {
+        let known_hosts = dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts"));
+
         Self {
             host: host.into(),
             port,
@@ -222,21 +233,23 @@ impl SshConfig {
                 key_path: key_path.into(),
                 passphrase,
             },
+            host_key_check: HostKeyCheck::Strict,
+            known_hosts_path: known_hosts,
             timeout: Duration::from_secs(30),
         }
     }
 
     /// Create a new SSH config with SSH agent authentication
-    pub fn with_agent(
-        host: impl Into<String>,
-        port: u16,
-        username: impl Into<String>,
-    ) -> Self {
+    pub fn with_agent(host: impl Into<String>, port: u16, username: impl Into<String>) -> Self {
+        let known_hosts = dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts"));
+
         Self {
             host: host.into(),
             port,
             username: username.into(),
             auth: AuthMethod::Agent,
+            host_key_check: HostKeyCheck::Strict,
+            known_hosts_path: known_hosts,
             timeout: Duration::from_secs(30),
         }
     }

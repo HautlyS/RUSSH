@@ -80,15 +80,33 @@ impl Permissions {
     /// Convert to Unix mode bits
     pub fn to_mode(&self) -> u32 {
         let mut mode = 0u32;
-        if self.owner_read { mode |= 0o400; }
-        if self.owner_write { mode |= 0o200; }
-        if self.owner_execute { mode |= 0o100; }
-        if self.group_read { mode |= 0o040; }
-        if self.group_write { mode |= 0o020; }
-        if self.group_execute { mode |= 0o010; }
-        if self.other_read { mode |= 0o004; }
-        if self.other_write { mode |= 0o002; }
-        if self.other_execute { mode |= 0o001; }
+        if self.owner_read {
+            mode |= 0o400;
+        }
+        if self.owner_write {
+            mode |= 0o200;
+        }
+        if self.owner_execute {
+            mode |= 0o100;
+        }
+        if self.group_read {
+            mode |= 0o040;
+        }
+        if self.group_write {
+            mode |= 0o020;
+        }
+        if self.group_execute {
+            mode |= 0o010;
+        }
+        if self.other_read {
+            mode |= 0o004;
+        }
+        if self.other_write {
+            mode |= 0o002;
+        }
+        if self.other_execute {
+            mode |= 0o001;
+        }
         mode
     }
 }
@@ -127,7 +145,12 @@ pub struct FileMetadata {
 
 impl FileMetadata {
     /// Create metadata for a new file
-    pub fn new_file(path: PathBuf, size: u64, content_hash: ContentHash, chunks: Vec<ContentHash>) -> Self {
+    pub fn new_file(
+        path: PathBuf,
+        size: u64,
+        content_hash: ContentHash,
+        chunks: Vec<ContentHash>,
+    ) -> Self {
         let now = Utc::now();
         Self {
             path,
@@ -231,20 +254,20 @@ mod tests {
     #[test]
     fn file_metadata_serialization_roundtrip() {
         use crate::encryption::hash::hash_data;
-        
+
         let content_hash = hash_data(b"test content");
         let chunk_hash = hash_data(b"chunk data");
-        
+
         let metadata = FileMetadata::new_file(
             PathBuf::from("/test/file.txt"),
             100,
             content_hash,
             vec![chunk_hash],
         );
-        
+
         let json = metadata.to_json().unwrap();
         let restored = FileMetadata::from_json(&json).unwrap();
-        
+
         assert_eq!(restored.path, metadata.path);
         assert_eq!(restored.size, metadata.size);
         assert_eq!(restored.content_hash, metadata.content_hash);
@@ -254,7 +277,7 @@ mod tests {
     #[test]
     fn directory_metadata() {
         let metadata = FileMetadata::new_directory(PathBuf::from("/test/dir"));
-        
+
         assert!(metadata.is_directory());
         assert!(!metadata.is_file());
         assert_eq!(metadata.permissions.to_mode(), 0o755);
@@ -262,11 +285,9 @@ mod tests {
 
     #[test]
     fn symlink_metadata() {
-        let metadata = FileMetadata::new_symlink(
-            PathBuf::from("/test/link"),
-            PathBuf::from("/test/target"),
-        );
-        
+        let metadata =
+            FileMetadata::new_symlink(PathBuf::from("/test/link"), PathBuf::from("/test/target"));
+
         assert!(metadata.is_symlink());
         assert_eq!(metadata.symlink_target, Some(PathBuf::from("/test/target")));
     }

@@ -1,6 +1,6 @@
 //! Video streaming Tauri commands
 
-use russh_ssh::streaming::{StreamSession, StreamRoom, StreamSource, PlaybackState};
+use russh_ssh::streaming::{PlaybackState, StreamRoom, StreamSession, StreamSource};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{Emitter, State, Window};
@@ -25,9 +25,18 @@ pub struct StreamRoomResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum StreamSourceResponse {
-    Url { url: String },
-    LocalFile { path: String, size: u64 },
-    P2PFile { host_id: String, file_id: String, size: u64 },
+    Url {
+        url: String,
+    },
+    LocalFile {
+        path: String,
+        size: u64,
+    },
+    P2PFile {
+        host_id: String,
+        file_id: String,
+        size: u64,
+    },
 }
 
 /// Playback state response
@@ -55,8 +64,18 @@ impl From<StreamSource> for StreamSourceResponse {
     fn from(source: StreamSource) -> Self {
         match source {
             StreamSource::Url { url } => StreamSourceResponse::Url { url },
-            StreamSource::LocalFile { path, size } => StreamSourceResponse::LocalFile { path, size },
-            StreamSource::P2PFile { host_id, file_id, size } => StreamSourceResponse::P2PFile { host_id, file_id, size },
+            StreamSource::LocalFile { path, size } => {
+                StreamSourceResponse::LocalFile { path, size }
+            }
+            StreamSource::P2PFile {
+                host_id,
+                file_id,
+                size,
+            } => StreamSourceResponse::P2PFile {
+                host_id,
+                file_id,
+                size,
+            },
         }
     }
 }
@@ -89,14 +108,14 @@ pub async fn stream_create_room(
     request: CreateStreamRequest,
 ) -> Result<StreamRoomResponse, AppError> {
     tracing::info!("Creating stream room: {}", request.name);
-    
+
     // Get node ID for host
     let host_id = if let Some((endpoint, _)) = state.get_p2p_state().await {
         endpoint.node_id().to_string()
     } else {
         uuid::Uuid::new_v4().to_string()
     };
-    
+
     // Build source
     let source = match request.source_type.as_str() {
         "url" => {
@@ -112,20 +131,25 @@ pub async fn stream_create_room(
             let metadata = std::fs::metadata(&path).map_err(|e| {
                 AppError::FileOperationFailed(format!("Failed to read file: {}", e))
             })?;
-            StreamSource::LocalFile { path, size: metadata.len() }
+            StreamSource::LocalFile {
+                path,
+                size: metadata.len(),
+            }
         }
         _ => return Err(AppError::InternalError("Invalid source type".to_string())),
     };
-    
+
     // Create session
     let session = StreamSession::create_room(request.name, source, host_id);
     let room = session.room().await;
     let share_link = session.share_link().await;
     let room_id = room.room_id.clone();
-    
+
     // Store session
-    state.add_stream_session(room_id.clone(), Arc::new(session)).await;
-    
+    state
+        .add_stream_session(room_id.clone(), Arc::new(session))
+        .await;
+
     // Start event listener
     let win = window.clone();
     let rid = room_id.clone();
@@ -138,7 +162,7 @@ pub async fn stream_create_room(
             }
         });
     }
-    
+
     Ok(StreamRoomResponse {
         room_id: room.room_id,
         name: room.name,
@@ -159,21 +183,23 @@ pub async fn stream_join_room(
     host_id: String,
 ) -> Result<StreamRoomResponse, AppError> {
     tracing::info!("Joining stream room: {} (host: {})", room_id, host_id);
-    
+
     // Connect to host via P2P
-    let (_, manager) = state.get_p2p_state().await.ok_or_else(|| {
-        AppError::P2PConnectionFailed("P2P not initialized".to_string())
-    })?;
-    
-    let node_id: russh_ssh::NodeId = host_id.parse().map_err(|e| {
-        AppError::P2PConnectionFailed(format!("Invalid host ID: {}", e))
-    })?;
-    
+    let (_, manager) = state
+        .get_p2p_state()
+        .await
+        .ok_or_else(|| AppError::P2PConnectionFailed("P2P not initialized".to_string()))?;
+
+    let node_id: russh_ssh::NodeId = host_id
+        .parse()
+        .map_err(|e| AppError::P2PConnectionFailed(format!("Invalid host ID: {}", e)))?;
+
     // Connect to host
-    let _connection = manager.connect(node_id).await.map_err(|e| {
-        AppError::P2PConnectionFailed(e.to_string())
-    })?;
-    
+    let _connection = manager
+        .connect(node_id)
+        .await
+        .map_err(|e| AppError::P2PConnectionFailed(e.to_string()))?;
+
     // TODO: Request room info from host via P2P stream
     // For now, create a placeholder room
     let room = StreamRoom {
@@ -185,13 +211,15 @@ pub async fn stream_join_room(
         peers: vec![],
         created_at: chrono::Utc::now().timestamp(),
     };
-    
+
     let session = StreamSession::join_room(room.clone()).with_p2p(manager);
     let share_link = session.share_link().await;
-    
+
     // Store session
-    state.add_stream_session(room_id.clone(), Arc::new(session)).await;
-    
+    state
+        .add_stream_session(room_id.clone(), Arc::new(session))
+        .await;
+
     // Start event listener
     let win = window.clone();
     let rid = room_id.clone();
@@ -204,7 +232,7 @@ pub async fn stream_join_room(
             }
         });
     }
-    
+
     Ok(StreamRoomResponse {
         room_id: room.room_id,
         name: room.name,
@@ -233,13 +261,14 @@ pub async fn stream_get_room(
     state: State<'_, AppState>,
     room_id: String,
 ) -> Result<StreamRoomResponse, AppError> {
-    let session = state.get_stream_session(&room_id).await.ok_or_else(|| {
-        AppError::InternalError("Room not found".to_string())
-    })?;
-    
+    let session = state
+        .get_stream_session(&room_id)
+        .await
+        .ok_or_else(|| AppError::InternalError("Room not found".to_string()))?;
+
     let room = session.room().await;
     let share_link = session.share_link().await;
-    
+
     Ok(StreamRoomResponse {
         room_id: room.room_id,
         name: room.name,
@@ -257,28 +286,41 @@ pub async fn stream_sync(
     state: State<'_, AppState>,
     request: SyncEventRequest,
 ) -> Result<(), AppError> {
-    let session = state.get_stream_session(&request.room_id).await.ok_or_else(|| {
-        AppError::InternalError("Room not found".to_string())
-    })?;
-    
+    let session = state
+        .get_stream_session(&request.room_id)
+        .await
+        .ok_or_else(|| AppError::InternalError("Room not found".to_string()))?;
+
     match request.event_type.as_str() {
         "play" => {
-            session.play().await.map_err(|e| AppError::InternalError(e.to_string()))?;
+            session
+                .play()
+                .await
+                .map_err(|e| AppError::InternalError(e.to_string()))?;
         }
         "pause" => {
-            session.pause().await.map_err(|e| AppError::InternalError(e.to_string()))?;
+            session
+                .pause()
+                .await
+                .map_err(|e| AppError::InternalError(e.to_string()))?;
         }
         "seek" => {
             let position = request.position.unwrap_or(0.0);
-            session.seek(position).await.map_err(|e| AppError::InternalError(e.to_string()))?;
+            session
+                .seek(position)
+                .await
+                .map_err(|e| AppError::InternalError(e.to_string()))?;
         }
         "speed" => {
             let speed = request.speed.unwrap_or(1.0);
-            session.set_speed(speed).await.map_err(|e| AppError::InternalError(e.to_string()))?;
+            session
+                .set_speed(speed)
+                .await
+                .map_err(|e| AppError::InternalError(e.to_string()))?;
         }
         _ => return Err(AppError::InternalError("Invalid event type".to_string())),
     }
-    
+
     Ok(())
 }
 
@@ -301,9 +343,10 @@ pub async fn stream_get_expected_position(
     state: State<'_, AppState>,
     room_id: String,
 ) -> Result<f64, AppError> {
-    let session = state.get_stream_session(&room_id).await.ok_or_else(|| {
-        AppError::InternalError("Room not found".to_string())
-    })?;
-    
+    let session = state
+        .get_stream_session(&room_id)
+        .await
+        .ok_or_else(|| AppError::InternalError("Room not found".to_string()))?;
+
     Ok(session.expected_position().await)
 }

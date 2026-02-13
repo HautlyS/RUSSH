@@ -128,7 +128,8 @@ impl SessionManager {
     /// Remove a profile
     pub async fn remove_profile(&self, id: &Uuid) -> Result<SessionProfile, SessionError> {
         let mut profiles = self.profiles.write().await;
-        profiles.remove(id)
+        profiles
+            .remove(id)
             .ok_or_else(|| SessionError::ProfileNotFound(id.to_string()))
     }
 
@@ -141,7 +142,8 @@ impl SessionManager {
     /// Search profiles by tag
     pub async fn search_by_tag(&self, tag: &str) -> Vec<SessionProfile> {
         let profiles = self.profiles.read().await;
-        profiles.values()
+        profiles
+            .values()
             .filter(|p| p.tags.iter().any(|t| t.contains(tag)))
             .cloned()
             .collect()
@@ -204,9 +206,14 @@ impl SessionManager {
     }
 
     /// Get active session info
-    pub async fn get_session(&self, session_id: &Uuid) -> Option<(Uuid, Uuid, chrono::DateTime<chrono::Utc>)> {
+    pub async fn get_session(
+        &self,
+        session_id: &Uuid,
+    ) -> Option<(Uuid, Uuid, chrono::DateTime<chrono::Utc>)> {
         let active = self.active_sessions.read().await;
-        active.get(session_id).map(|s| (s.id, s.profile_id, s.started_at))
+        active
+            .get(session_id)
+            .map(|s| (s.id, s.profile_id, s.started_at))
     }
 
     /// List active sessions
@@ -230,11 +237,12 @@ impl SessionManager {
     /// # Requirements Coverage
     /// - Requirement 8.4: Session persistence
     pub async fn save(&self) -> Result<(), SessionError> {
-        let path = self.storage_path.as_ref()
-            .ok_or_else(|| SessionError::Io(std::io::Error::new(
+        let path = self.storage_path.as_ref().ok_or_else(|| {
+            SessionError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No storage path configured"
-            )))?;
+                "No storage path configured",
+            ))
+        })?;
 
         let profiles = self.profiles.read().await;
         let profiles_vec: Vec<&SessionProfile> = profiles.values().collect();
@@ -250,19 +258,20 @@ impl SessionManager {
     /// # Requirements Coverage
     /// - Requirement 8.4: Session persistence
     pub async fn load(&self) -> Result<(), SessionError> {
-        let path = self.storage_path.as_ref()
-            .ok_or_else(|| SessionError::Io(std::io::Error::new(
+        let path = self.storage_path.as_ref().ok_or_else(|| {
+            SessionError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No storage path configured"
-            )))?;
+                "No storage path configured",
+            ))
+        })?;
 
         if !path.exists() {
             return Ok(()); // No saved profiles yet
         }
 
         let json = tokio::fs::read_to_string(path).await?;
-        let profiles_vec: Vec<SessionProfile> = serde_json::from_str(&json)
-            .map_err(|e| SessionError::Serialization(e.to_string()))?;
+        let profiles_vec: Vec<SessionProfile> =
+            serde_json::from_str(&json).map_err(|e| SessionError::Serialization(e.to_string()))?;
 
         let mut profiles = self.profiles.write().await;
         for profile in profiles_vec {
@@ -275,8 +284,8 @@ impl SessionManager {
     /// Import profiles from a file
     pub async fn import(&self, path: &Path) -> Result<usize, SessionError> {
         let json = tokio::fs::read_to_string(path).await?;
-        let profiles_vec: Vec<SessionProfile> = serde_json::from_str(&json)
-            .map_err(|e| SessionError::Serialization(e.to_string()))?;
+        let profiles_vec: Vec<SessionProfile> =
+            serde_json::from_str(&json).map_err(|e| SessionError::Serialization(e.to_string()))?;
 
         let count = profiles_vec.len();
         let mut profiles = self.profiles.write().await;
@@ -353,14 +362,14 @@ mod tests {
 
         // Create session
         let session_id = manager.create_session(&profile_id).await.unwrap();
-        
+
         let stats = manager.stats().await;
         assert_eq!(stats.active_count, 1);
         assert_eq!(stats.total_created, 1);
 
         // Close session
         manager.close_session(&session_id).await.unwrap();
-        
+
         let stats = manager.stats().await;
         assert_eq!(stats.active_count, 0);
     }
@@ -373,13 +382,15 @@ mod tests {
             "Dev Server".to_string(),
             "dev.com".to_string(),
             "user".to_string(),
-        ).with_tag("development".to_string());
+        )
+        .with_tag("development".to_string());
 
         let profile2 = SessionProfile::new(
             "Prod Server".to_string(),
             "prod.com".to_string(),
             "user".to_string(),
-        ).with_tag("production".to_string());
+        )
+        .with_tag("production".to_string());
 
         manager.add_profile(profile1).await;
         manager.add_profile(profile2).await;

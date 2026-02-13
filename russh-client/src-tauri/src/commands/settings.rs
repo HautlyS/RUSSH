@@ -3,13 +3,11 @@
 use tauri::State;
 
 use crate::error::AppError;
-use crate::state::{AppState, AppSettings};
+use crate::state::{AppSettings, AppState};
 
 /// Load application settings
 #[tauri::command]
-pub async fn settings_load(
-    state: State<'_, AppState>,
-) -> Result<AppSettings, AppError> {
+pub async fn settings_load(state: State<'_, AppState>) -> Result<AppSettings, AppError> {
     tracing::info!("Loading settings");
     state.load_settings().await
 }

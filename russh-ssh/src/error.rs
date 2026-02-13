@@ -82,6 +82,10 @@ pub enum EncryptionError {
     #[error("Key generation failed: {0}")]
     KeyGeneration(String),
 
+    /// Invalid key
+    #[error("Invalid key: {0}")]
+    InvalidKey(String),
+
     /// Encryption operation failed
     #[error("Encryption failed: {0}")]
     Encryption(String),
@@ -298,8 +302,16 @@ mod tests {
         ];
 
         for error in errors {
-            assert!(error.is_descriptive(), "Error should be descriptive: {:?}", error);
-            assert!(!error.reason().is_empty(), "Error reason should not be empty: {:?}", error);
+            assert!(
+                error.is_descriptive(),
+                "Error should be descriptive: {:?}",
+                error
+            );
+            assert!(
+                !error.reason().is_empty(),
+                "Error reason should not be empty: {:?}",
+                error
+            );
         }
     }
 }

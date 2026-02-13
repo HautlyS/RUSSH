@@ -3,10 +3,10 @@
 //! Feature: russh-ssh
 //! These tests validate the correctness properties of the encryption layer.
 
-use russh_ssh::encryption::hash::{hash_data, ContentHash, IncrementalHasher, verify_hash};
-use russh_ssh::encryption::cipher::{encrypt, decrypt, EncryptionKey};
-use russh_ssh::encryption::secure_channel::SecureChannelBuilder;
 use proptest::prelude::*;
+use russh_ssh::encryption::cipher::{decrypt, encrypt, EncryptionKey};
+use russh_ssh::encryption::hash::{hash_data, verify_hash, ContentHash, IncrementalHasher};
+use russh_ssh::encryption::secure_channel::SecureChannelBuilder;
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
@@ -276,16 +276,15 @@ proptest! {
     }
 }
 
-
 /// Feature: russh-ssh, Property 5: Invalid Ciphertext Error Handling
 ///
 /// Tests for invalid ciphertext handling - these are separate from the proptest
 /// block because they test error conditions.
 #[cfg(test)]
 mod invalid_ciphertext_tests {
-    use russh_ssh::encryption::cipher::{encrypt, decrypt, EncryptionKey, NONCE_SIZE};
-    use russh_ssh::encryption::hash::hash_data;
     use proptest::prelude::*;
+    use russh_ssh::encryption::cipher::{decrypt, encrypt, EncryptionKey, NONCE_SIZE};
+    use russh_ssh::encryption::hash::hash_data;
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(100))]

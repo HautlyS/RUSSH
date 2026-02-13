@@ -39,7 +39,10 @@ impl ConnectionState {
 
     /// Check if a connection attempt is in progress
     pub fn is_connecting(&self) -> bool {
-        matches!(self, ConnectionState::Connecting | ConnectionState::Reconnecting { .. })
+        matches!(
+            self,
+            ConnectionState::Connecting | ConnectionState::Reconnecting { .. }
+        )
     }
 
     /// Check if the connection has failed
@@ -104,8 +107,6 @@ impl ConnectionState {
     }
 }
 
-
-
 impl std::fmt::Display for ConnectionState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -130,7 +131,7 @@ pub struct StateChangeEvent {
 }
 
 /// Manager for connection state with broadcasting capabilities
-/// 
+///
 /// Thread-safe state management with proper handling of poisoned locks.
 pub struct StateManager {
     /// Current state
@@ -159,10 +160,11 @@ impl StateManager {
     }
 
     /// Get the current state
-    /// 
+    ///
     /// Handles poisoned locks gracefully by recovering the inner value.
     pub fn state(&self) -> ConnectionState {
-        self.state.read()
+        self.state
+            .read()
             .unwrap_or_else(|poisoned| {
                 tracing::warn!("State lock was poisoned, recovering");
                 poisoned.into_inner()
@@ -175,11 +177,10 @@ impl StateManager {
     /// Returns true if the state was changed, false if it was the same.
     /// Handles poisoned locks gracefully.
     pub fn set_state(&self, new_state: ConnectionState) -> bool {
-        let mut state = self.state.write()
-            .unwrap_or_else(|poisoned| {
-                tracing::warn!("State lock was poisoned, recovering");
-                poisoned.into_inner()
-            });
+        let mut state = self.state.write().unwrap_or_else(|poisoned| {
+            tracing::warn!("State lock was poisoned, recovering");
+            poisoned.into_inner()
+        });
         if *state == new_state {
             return false;
         }
@@ -201,11 +202,10 @@ impl StateManager {
     /// Returns Ok(true) if transitioned, Ok(false) if same state, Err if invalid transition.
     /// Handles poisoned locks gracefully.
     pub fn try_transition(&self, new_state: ConnectionState) -> Result<bool, InvalidTransition> {
-        let mut state = self.state.write()
-            .unwrap_or_else(|poisoned| {
-                tracing::warn!("State lock was poisoned, recovering");
-                poisoned.into_inner()
-            });
+        let mut state = self.state.write().unwrap_or_else(|poisoned| {
+            tracing::warn!("State lock was poisoned, recovering");
+            poisoned.into_inner()
+        });
 
         if *state == new_state {
             return Ok(false);
@@ -278,7 +278,10 @@ mod tests {
         assert!(!ConnectionState::Connecting.is_connected());
         assert!(ConnectionState::Connected.is_connected());
         assert!(!ConnectionState::Reconnecting { attempt: 1 }.is_connected());
-        assert!(!ConnectionState::Failed { reason: "test".to_string() }.is_connected());
+        assert!(!ConnectionState::Failed {
+            reason: "test".to_string()
+        }
+        .is_connected());
     }
 
     #[test]
@@ -287,7 +290,10 @@ mod tests {
         assert!(ConnectionState::Connecting.is_connecting());
         assert!(!ConnectionState::Connected.is_connecting());
         assert!(ConnectionState::Reconnecting { attempt: 1 }.is_connecting());
-        assert!(!ConnectionState::Failed { reason: "test".to_string() }.is_connecting());
+        assert!(!ConnectionState::Failed {
+            reason: "test".to_string()
+        }
+        .is_connecting());
     }
 
     #[test]
@@ -300,7 +306,10 @@ mod tests {
             "Reconnecting (attempt 3)"
         );
         assert_eq!(
-            ConnectionState::Failed { reason: "timeout".to_string() }.to_string(),
+            ConnectionState::Failed {
+                reason: "timeout".to_string()
+            }
+            .to_string(),
             "Failed: timeout"
         );
     }
@@ -322,13 +331,18 @@ mod tests {
         assert!(ConnectionState::Connecting.can_transition_to(&ConnectionState::Connected));
 
         // Connected -> Reconnecting
-        assert!(ConnectionState::Connected.can_transition_to(&ConnectionState::Reconnecting { attempt: 1 }));
+        assert!(ConnectionState::Connected
+            .can_transition_to(&ConnectionState::Reconnecting { attempt: 1 }));
 
         // Reconnecting -> Connected
-        assert!(ConnectionState::Reconnecting { attempt: 1 }.can_transition_to(&ConnectionState::Connected));
+        assert!(ConnectionState::Reconnecting { attempt: 1 }
+            .can_transition_to(&ConnectionState::Connected));
 
         // Failed -> Connecting (retry)
-        assert!(ConnectionState::Failed { reason: "test".to_string() }.can_transition_to(&ConnectionState::Connecting));
+        assert!(ConnectionState::Failed {
+            reason: "test".to_string()
+        }
+        .can_transition_to(&ConnectionState::Connecting));
     }
 
     #[test]
@@ -337,7 +351,8 @@ mod tests {
         assert!(!ConnectionState::Disconnected.can_transition_to(&ConnectionState::Connected));
 
         // Disconnected -> Reconnecting (must be connected first)
-        assert!(!ConnectionState::Disconnected.can_transition_to(&ConnectionState::Reconnecting { attempt: 1 }));
+        assert!(!ConnectionState::Disconnected
+            .can_transition_to(&ConnectionState::Reconnecting { attempt: 1 }));
     }
 
     #[test]

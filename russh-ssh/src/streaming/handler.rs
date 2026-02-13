@@ -31,7 +31,7 @@ impl StreamPosition {
                 position as f64 / size as f64
             }
         });
-        
+
         Self {
             position,
             total_size,
@@ -94,7 +94,7 @@ impl StreamHandler {
     pub fn new(stream_id: String, config: BufferConfig) -> Self {
         let buffer = AdaptiveBuffer::new(config);
         let state = StreamState::new(stream_id.clone(), 0, None);
-        
+
         Self {
             stream_id,
             buffer,
@@ -119,7 +119,7 @@ impl StreamHandler {
             buffer = buffer.with_stream_size(size);
         }
         buffer.seek(state.position);
-        
+
         Self {
             stream_id,
             buffer,
@@ -255,7 +255,7 @@ mod tests {
     fn stream_position_progress() {
         let pos = StreamPosition::new(50, Some(100));
         assert_eq!(pos.progress, Some(0.5));
-        
+
         let pos_unknown = StreamPosition::new(50, None);
         assert_eq!(pos_unknown.progress, None);
     }
@@ -264,7 +264,7 @@ mod tests {
     fn stream_handler_basic() {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let handler = StreamHandler::new("test-stream".to_string(), config);
-        
+
         assert_eq!(handler.stream_id(), "test-stream");
         assert!(handler.is_active());
         assert!(handler.needs_data());
@@ -273,11 +273,10 @@ mod tests {
     #[test]
     fn stream_handler_read_write() {
         let config = BufferConfig::new(1024, 1024 * 1024);
-        let mut handler = StreamHandler::new("test-stream".to_string(), config)
-            .with_size(1000);
-        
+        let mut handler = StreamHandler::new("test-stream".to_string(), config).with_size(1000);
+
         handler.add_data(0, vec![1, 2, 3, 4, 5]);
-        
+
         let data = handler.read(3).unwrap();
         assert_eq!(data, vec![1, 2, 3]);
         assert_eq!(handler.position().position, 3);
@@ -286,14 +285,13 @@ mod tests {
     #[test]
     fn stream_handler_seek() {
         let config = BufferConfig::new(1024, 1024 * 1024);
-        let mut handler = StreamHandler::new("test-stream".to_string(), config)
-            .with_size(100);
-        
+        let mut handler = StreamHandler::new("test-stream".to_string(), config).with_size(100);
+
         handler.add_data(0, vec![0; 100]);
-        
+
         handler.seek(50).unwrap();
         assert_eq!(handler.position().position, 50);
-        
+
         // Out of bounds
         let result = handler.seek(150);
         assert!(result.is_err());
@@ -303,9 +301,9 @@ mod tests {
     fn stream_handler_resume() {
         let config = BufferConfig::new(1024, 1024 * 1024);
         let state = StreamState::new("test-stream".to_string(), 50, Some(100));
-        
+
         let handler = StreamHandler::resume("test-stream".to_string(), config, state);
-        
+
         assert_eq!(handler.position().position, 50);
         assert_eq!(handler.state().total_size, Some(100));
     }
@@ -313,10 +311,10 @@ mod tests {
     #[test]
     fn stream_state_serialization() {
         let state = StreamState::new("test".to_string(), 100, Some(1000));
-        
+
         let json = serde_json::to_string(&state).unwrap();
         let restored: StreamState = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(restored.stream_id, state.stream_id);
         assert_eq!(restored.position, state.position);
         assert_eq!(restored.total_size, state.total_size);

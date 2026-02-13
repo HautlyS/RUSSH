@@ -6,9 +6,9 @@
 //! - Requirement 7.1: CLI interface
 
 use clap::{Parser, Subcommand};
-use russh_ssh::session::{SessionManager, SessionProfile};
 use russh_ssh::session::profile::AuthConfig;
-use russh_ssh::ssh::{SshClient, SshConfig, AuthMethod, PortForward, PortForwarder, HostKeyCheck};
+use russh_ssh::session::{SessionManager, SessionProfile};
+use russh_ssh::ssh::{AuthMethod, HostKeyCheck, PortForward, PortForwarder, SshClient, SshConfig};
 use std::path::PathBuf;
 use std::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -114,7 +114,7 @@ async fn main() -> anyhow::Result<()> {
     // Expand config directory
     let config_dir = shellexpand::tilde(&cli.config_dir).to_string();
     let config_path = PathBuf::from(&config_dir);
-    
+
     // Ensure config directory exists
     if !config_path.exists() {
         tokio::fs::create_dir_all(&config_path).await?;
@@ -122,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
 
     let profiles_path = config_path.join("profiles.json");
     let manager = SessionManager::with_storage(profiles_path.clone());
-    
+
     // Load existing profiles
     if let Err(e) = manager.load().await {
         if cli.verbose {
@@ -131,8 +131,22 @@ async fn main() -> anyhow::Result<()> {
     }
 
     match cli.command {
-        Some(Commands::Connect { target, password, identity, local_forward, command }) => {
-            connect(&manager, &target, password, identity, local_forward, command).await?;
+        Some(Commands::Connect {
+            target,
+            password,
+            identity,
+            local_forward,
+            command,
+        }) => {
+            connect(
+                &manager,
+                &target,
+                password,
+                identity,
+                local_forward,
+                command,
+            )
+            .await?;
         }
         Some(Commands::Profile { action }) => {
             handle_profile_action(&manager, action).await?;
@@ -199,15 +213,10 @@ async fn connect(
     } else {
         // Try default key locations
         let home = dirs::home_dir().unwrap_or_default();
-        let default_keys = [
-            home.join(".ssh/id_ed25519"),
-            home.join(".ssh/id_rsa"),
-        ];
-        
-        let key_path = default_keys.iter()
-            .find(|p| p.exists())
-            .cloned();
-        
+        let default_keys = [home.join(".ssh/id_ed25519"), home.join(".ssh/id_rsa")];
+
+        let key_path = default_keys.iter().find(|p| p.exists()).cloned();
+
         match key_path {
             Some(path) => {
                 println!("Using key: {}", path.display());
@@ -231,7 +240,11 @@ async fn connect(
         username: username.clone(),
         auth,
         timeout: Duration::from_secs(30),
-        known_hosts_path: Some(dirs::home_dir().unwrap_or_default().join(".russh/known_hosts")),
+        known_hosts_path: Some(
+            dirs::home_dir()
+                .unwrap_or_default()
+                .join(".russh/known_hosts"),
+        ),
         host_key_check: HostKeyCheck::AcceptNew,
     };
 
@@ -244,9 +257,17 @@ async fn connect(
     for forward_spec in local_forwards {
         if let Some(forward) = parse_local_forward(&forward_spec) {
             match client.start_forward(forward.clone()).await {
-                Ok(handle) => {
-                    if let PortForward::Local { local_port, remote_host, remote_port } = &forward {
-                        println!("Forwarding localhost:{} -> {}:{}", local_port, remote_host, remote_port);
+                Ok(_handle) => {
+                    if let PortForward::Local {
+                        local_port,
+                        remote_host,
+                        remote_port,
+                    } = &forward
+                    {
+                        println!(
+                            "Forwarding localhost:{} -> {}:{}",
+                            local_port, remote_host, remote_port
+                        );
                     }
                 }
                 Err(e) => {
@@ -280,7 +301,7 @@ fn parse_target(target: &str) -> anyhow::Result<(String, u16, String)> {
 
     let username = parts[0].to_string();
     let host_port: Vec<&str> = parts[1].split(':').collect();
-    
+
     let host = host_port[0].to_string();
     let port = if host_port.len() > 1 {
         host_port[1].parse()?
@@ -309,7 +330,10 @@ fn parse_local_forward(spec: &str) -> Option<PortForward> {
     })
 }
 
-async fn handle_profile_action(manager: &SessionManager, action: ProfileAction) -> anyhow::Result<()> {
+async fn handle_profile_action(
+    manager: &SessionManager,
+    action: ProfileAction,
+) -> anyhow::Result<()> {
     match action {
         ProfileAction::List => {
             let profiles = manager.list_profiles().await;
@@ -320,11 +344,9 @@ async fn handle_profile_action(manager: &SessionManager, action: ProfileAction) 
                 println!("Saved profiles:");
                 println!();
                 for profile in profiles {
-                    println!("  {} - {}@{}:{}", 
-                        profile.name, 
-                        profile.username, 
-                        profile.host, 
-                        profile.port
+                    println!(
+                        "  {} - {}@{}:{}",
+                        profile.name, profile.username, profile.host, profile.port
                     );
                     if let Some(desc) = &profile.description {
                         println!("    {}", desc);
@@ -332,11 +354,16 @@ async fn handle_profile_action(manager: &SessionManager, action: ProfileAction) 
                 }
             }
         }
-        ProfileAction::Add { name, host, user, port } => {
+        ProfileAction::Add {
+            name,
+            host,
+            user,
+            port,
+        } => {
             let profile = SessionProfile::new(name.clone(), host.clone(), user.clone())
                 .with_port(port)
                 .with_auth(AuthConfig::Agent);
-            
+
             manager.add_profile(profile).await;
             println!("Profile '{}' added: {}@{}:{}", name, user, host, port);
         }

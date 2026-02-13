@@ -7,6 +7,10 @@ license.workspace = true
 rust-version.workspace = true
 description = "A secure, efficient russh SSH library with P2P networking and end-to-end encryption"
 
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "warn"
+
 [dependencies]
 tokio.workspace = true
 iroh.workspace = true
@@ -14,6 +18,7 @@ ring.workspace = true
 blake3.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+dirs = "5.0"
 thiserror.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true

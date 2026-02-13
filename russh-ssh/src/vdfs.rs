@@ -10,11 +10,11 @@
 //! - Requirement 5.5: File metadata serialization
 
 pub mod chunk;
+pub mod filesystem;
 pub mod metadata;
 pub mod sync;
-pub mod filesystem;
 
-pub use chunk::{Chunk, ChunkStore, ChunkId, chunk_data, reassemble_chunks};
-pub use metadata::FileMetadata;
-pub use sync::{SyncState, SyncEngine};
+pub use chunk::{chunk_data, reassemble_chunks, Chunk, ChunkId, ChunkStore};
 pub use filesystem::VirtualFs;
+pub use metadata::FileMetadata;
+pub use sync::{SyncEngine, SyncState};

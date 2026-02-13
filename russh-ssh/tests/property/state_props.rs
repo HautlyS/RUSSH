@@ -3,8 +3,8 @@
 //! Feature: russh-ssh
 //! These tests validate the correctness properties of the state machine.
 
-use russh_ssh::connection::state::{ConnectionState, StateManager};
 use proptest::prelude::*;
+use russh_ssh::connection::state::{ConnectionState, StateManager};
 
 /// Strategy for generating valid connection states
 fn connection_state_strategy() -> impl Strategy<Value = ConnectionState> {
@@ -31,7 +31,7 @@ proptest! {
         initial in connection_state_strategy(),
     ) {
         let manager = StateManager::with_state(initial.clone());
-        
+
         // Get valid next states based on current state
         let valid_next_states: Vec<ConnectionState> = match &initial {
             ConnectionState::Disconnected => vec![
@@ -59,7 +59,7 @@ proptest! {
                 ConnectionState::Disconnected,
             ],
         };
-        
+
         for next_state in valid_next_states {
             let result = manager.try_transition(next_state.clone());
             prop_assert!(
@@ -67,7 +67,7 @@ proptest! {
                 "Valid transition from {:?} to {:?} must succeed",
                 initial, next_state
             );
-            
+
             // Reset for next test
             let _ = manager.set_state(initial.clone());
         }
@@ -84,7 +84,7 @@ proptest! {
         initial in connection_state_strategy(),
     ) {
         let manager = StateManager::with_state(initial.clone());
-        
+
         // Get invalid next states based on current state
         let invalid_next_states: Vec<ConnectionState> = match &initial {
             ConnectionState::Disconnected => vec![
@@ -105,7 +105,7 @@ proptest! {
                 ConnectionState::Reconnecting { attempt: 1 }, // Must be connected first
             ],
         };
-        
+
         for next_state in invalid_next_states {
             let initial_clone = initial.clone();
             let result = manager.try_transition(next_state.clone());
@@ -114,7 +114,7 @@ proptest! {
                 "Invalid transition from {:?} to {:?} must fail",
                 initial_clone, next_state
             );
-            
+
             // State should remain unchanged
             prop_assert_eq!(
                 manager.state(), initial.clone(),
@@ -134,9 +134,9 @@ proptest! {
         state in connection_state_strategy(),
     ) {
         let manager = StateManager::with_state(state.clone());
-        
+
         let changed = manager.set_state(state.clone());
-        
+
         prop_assert!(!changed, "Setting same state must return false");
         prop_assert_eq!(manager.state(), state, "State must remain unchanged");
     }
@@ -152,7 +152,7 @@ proptest! {
     ) {
         let manager = StateManager::with_state(state.clone());
         let current = manager.state();
-        
+
         match &current {
             ConnectionState::Disconnected => {
                 prop_assert!(current.is_disconnected());
@@ -201,7 +201,7 @@ proptest! {
     ) {
         let json = serde_json::to_string(&state).unwrap();
         let deserialized: ConnectionState = serde_json::from_str(&json).unwrap();
-        
+
         prop_assert_eq!(state, deserialized, "Serialization roundtrip must preserve state");
     }
 }
@@ -216,10 +216,10 @@ mod broadcast_tests {
     async fn state_changes_are_broadcast() {
         let manager = Arc::new(StateManager::new());
         let mut receiver = manager.subscribe();
-        
+
         // Change state
         manager.set_state(ConnectionState::Connecting);
-        
+
         // Should receive the event
         let event = receiver.recv().await.unwrap();
         assert_eq!(event.old_state, ConnectionState::Disconnected);
@@ -231,14 +231,14 @@ mod broadcast_tests {
         let manager = Arc::new(StateManager::new());
         let mut receiver1 = manager.subscribe();
         let mut receiver2 = manager.subscribe();
-        
+
         // Change state
         manager.set_state(ConnectionState::Connecting);
-        
+
         // Both should receive the event
         let event1 = receiver1.recv().await.unwrap();
         let event2 = receiver2.recv().await.unwrap();
-        
+
         assert_eq!(event1.new_state, ConnectionState::Connecting);
         assert_eq!(event2.new_state, ConnectionState::Connecting);
     }

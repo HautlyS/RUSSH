@@ -12,11 +12,11 @@
 use super::SshClient;
 use crate::error::{ForwardError, SshError};
 use async_trait::async_trait;
-use uuid::Uuid;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use uuid::Uuid;
 
 /// Port forward configuration
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -34,9 +34,7 @@ pub enum PortForward {
         local_port: u16,
     },
     /// Dynamic port forwarding (SOCKS Proxy)
-    Dynamic {
-        local_port: u16,
-    },
+    Dynamic { local_port: u16 },
 }
 
 /// Active forward handle
@@ -55,7 +53,7 @@ impl ForwardHandle {
             bytes_transferred: AtomicU64::new(0),
         }
     }
-    
+
     pub fn inc_bytes(&self, bytes: u64) {
         self.bytes_transferred.fetch_add(bytes, Ordering::Relaxed);
     }
@@ -65,71 +63,108 @@ impl ForwardHandle {
 #[async_trait]
 pub trait PortForwarder {
     /// Start a port forward
-    async fn start_forward(&self, forward: PortForward) -> Result<Arc<ForwardHandle>, ForwardError>;
-    
+    async fn start_forward(&self, forward: PortForward)
+        -> Result<Arc<ForwardHandle>, ForwardError>;
+
     /// Stop a port forward
     async fn stop_forward(&self, id: Uuid) -> Result<(), ForwardError>;
-    
+
     /// List active forwards
     async fn list_forwards(&self) -> Vec<Arc<ForwardHandle>>;
 }
 
 #[async_trait]
 impl PortForwarder for SshClient {
-    async fn start_forward(&self, forward: PortForward) -> Result<Arc<ForwardHandle>, ForwardError> {
-        let client = self.inner().ok_or(ForwardError::Ssh(SshError::NotConnected))?;
-        
+    async fn start_forward(
+        &self,
+        forward: PortForward,
+    ) -> Result<Arc<ForwardHandle>, ForwardError> {
+        let client = self
+            .inner()
+            .ok_or(ForwardError::Ssh(SshError::NotConnected))?;
+
         let id = Uuid::new_v4();
         let handle = Arc::new(ForwardHandle::new(id, forward.clone()));
-        
+
         let abort_handle = match &forward {
-            PortForward::Local { local_port, remote_host, remote_port } => {
-                let listener = TcpListener::bind(format!("127.0.0.1:{}", local_port)).await
-                    .map_err(|e| ForwardError::BindFailed { port: *local_port, reason: e.to_string() })?;
-                
+            PortForward::Local {
+                local_port,
+                remote_host,
+                remote_port,
+            } => {
+                let listener = TcpListener::bind(format!("127.0.0.1:{}", local_port))
+                    .await
+                    .map_err(|e| ForwardError::BindFailed {
+                        port: *local_port,
+                        reason: e.to_string(),
+                    })?;
+
                 let remote_host = remote_host.clone();
                 let remote_port = *remote_port;
                 let local_port = *local_port;
-                
+
                 // Clone the client for use in the spawned task
                 // Note: async-ssh2-tokio Client should be Clone
                 let client_clone = client.clone();
-                
+
                 let task = tokio::spawn(async move {
                     tracing::info!("Started local forward on port {}", local_port);
-                    
+
                     loop {
                         match listener.accept().await {
                             Ok((mut local_stream, addr)) => {
-                                tracing::debug!("Accepted connection from {} for forward to {}:{}", addr, remote_host, remote_port);
-                                
+                                tracing::debug!(
+                                    "Accepted connection from {} for forward to {}:{}",
+                                    addr,
+                                    remote_host,
+                                    remote_port
+                                );
+
                                 let host = remote_host.clone();
                                 let port = remote_port;
                                 let client_for_conn = client_clone.clone();
-                                
+
                                 tokio::spawn(async move {
-                                    tracing::debug!("Opening direct TCP/IP channel to {}:{}", host, port);
-                                    
+                                    tracing::debug!(
+                                        "Opening direct TCP/IP channel to {}:{}",
+                                        host,
+                                        port
+                                    );
+
                                     // Format as "host:port" string for the API
                                     let target = format!("{}:{}", host, port);
-                                    match client_for_conn.open_direct_tcpip_channel(target, None).await {
+                                    match client_for_conn
+                                        .open_direct_tcpip_channel(target, None)
+                                        .await
+                                    {
                                         Ok(channel) => {
                                             tracing::debug!("Channel opened, bridging streams");
-                                            
+
                                             // Convert channel to stream for AsyncRead/AsyncWrite
                                             let mut channel_stream = channel.into_stream();
-                                            
-                                            match tokio::io::copy_bidirectional(&mut local_stream, &mut channel_stream).await {
+
+                                            match tokio::io::copy_bidirectional(
+                                                &mut local_stream,
+                                                &mut channel_stream,
+                                            )
+                                            .await
+                                            {
                                                 Ok((sent, received)) => {
                                                     tracing::debug!("Forward connection closed. Sent: {}, Received: {}", sent, received);
                                                 }
                                                 Err(e) => {
-                                                    tracing::error!("Error bridging streams: {}", e);
+                                                    tracing::error!(
+                                                        "Error bridging streams: {}",
+                                                        e
+                                                    );
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            tracing::error!("Failed to open direct-tcpip channel: {}", e);
+                                            tracing::error!(
+                                                "Failed to open direct-tcpip channel: {}",
+                                                e
+                                            );
                                         }
                                     }
                                 });
@@ -142,8 +177,12 @@ impl PortForwarder for SshClient {
                     }
                 });
                 task.abort_handle()
-            },
-            PortForward::Remote { remote_port, local_host, local_port } => {
+            }
+            PortForward::Remote {
+                remote_port,
+                local_host,
+                local_port,
+            } => {
                 // Remote port forwarding: The SSH server listens on remote_port and
                 // forwards connections to local_host:local_port on the client side.
                 //
@@ -153,31 +192,32 @@ impl PortForwarder for SshClient {
                 //
                 // For full remote port forwarding support, consider using the russh
                 // library directly or an SSH server that supports reverse tunnels.
-                
+
                 let remote_port = *remote_port;
                 let local_host = local_host.clone();
                 let local_port = *local_port;
-                
+
                 // We'll use socat or netcat on the remote side if available
                 // This is a workaround since direct tcpip-forward isn't exposed
                 let client_clone = client.clone();
-                
+
                 let task = tokio::spawn(async move {
                     tracing::info!(
                         "Starting remote forward: remote:{} -> {}:{}",
-                        remote_port, local_host, local_port
+                        remote_port,
+                        local_host,
+                        local_port
                     );
-                    
+
                     // Try to set up a reverse tunnel using SSH command
                     // This requires socat or similar on the remote host
                     let cmd = format!(
                         "socat TCP-LISTEN:{},fork,reuseaddr TCP:{}:{} 2>/dev/null || \
                          nc -l -p {} -c 'nc {} {}' 2>/dev/null || \
                          echo 'Remote forwarding requires socat or netcat on remote host'",
-                        remote_port, local_host, local_port,
-                        remote_port, local_host, local_port
+                        remote_port, local_host, local_port, remote_port, local_host, local_port
                     );
-                    
+
                     match client_clone.execute(&cmd).await {
                         Ok(result) => {
                             if result.exit_status != 0 {
@@ -198,24 +238,30 @@ impl PortForwarder for SshClient {
             PortForward::Dynamic { local_port } => {
                 // Dynamic port forwarding: SOCKS5 proxy
                 // Listen on local_port and forward connections based on SOCKS5 protocol
-                
-                let listener = TcpListener::bind(format!("127.0.0.1:{}", local_port)).await
-                    .map_err(|e| ForwardError::BindFailed { port: *local_port, reason: e.to_string() })?;
-                
+
+                let listener = TcpListener::bind(format!("127.0.0.1:{}", local_port))
+                    .await
+                    .map_err(|e| ForwardError::BindFailed {
+                        port: *local_port,
+                        reason: e.to_string(),
+                    })?;
+
                 let local_port = *local_port;
                 let client_clone = client.clone();
-                
+
                 let task = tokio::spawn(async move {
                     tracing::info!("Started SOCKS5 proxy on port {}", local_port);
-                    
+
                     loop {
                         match listener.accept().await {
                             Ok((stream, addr)) => {
                                 tracing::debug!("SOCKS5: Accepted connection from {}", addr);
                                 let client_for_conn = client_clone.clone();
-                                
+
                                 tokio::spawn(async move {
-                                    if let Err(e) = handle_socks5_connection(stream, client_for_conn).await {
+                                    if let Err(e) =
+                                        handle_socks5_connection(stream, client_for_conn).await
+                                    {
                                         tracing::debug!("SOCKS5 connection error: {}", e);
                                     }
                                 });
@@ -233,7 +279,7 @@ impl PortForwarder for SshClient {
 
         let mut forwards = self.forwards.write().await;
         forwards.insert(id, (handle.clone(), abort_handle));
-        
+
         Ok(handle)
     }
 
@@ -249,10 +295,12 @@ impl PortForwarder for SshClient {
 
     async fn list_forwards(&self) -> Vec<Arc<ForwardHandle>> {
         let forwards = self.forwards.read().await;
-        forwards.values().map(|(handle, _)| handle.clone()).collect()
+        forwards
+            .values()
+            .map(|(handle, _)| handle.clone())
+            .collect()
     }
 }
-
 
 /// Handle a SOCKS5 connection
 ///
@@ -265,55 +313,57 @@ async fn handle_socks5_connection(
     // SOCKS5 greeting
     let mut buf = [0u8; 2];
     stream.read_exact(&mut buf).await?;
-    
+
     if buf[0] != 0x05 {
         return Err(ForwardError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            "Invalid SOCKS version"
+            "Invalid SOCKS version",
         )));
     }
-    
+
     let nmethods = buf[1] as usize;
     let mut methods = vec![0u8; nmethods];
     stream.read_exact(&mut methods).await?;
-    
+
     // We only support no authentication (0x00)
     if !methods.contains(&0x00) {
         // Send "no acceptable methods"
         stream.write_all(&[0x05, 0xFF]).await?;
         return Err(ForwardError::Io(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
-            "No acceptable authentication method"
+            "No acceptable authentication method",
         )));
     }
-    
+
     // Send "no authentication required"
     stream.write_all(&[0x05, 0x00]).await?;
-    
+
     // Read SOCKS5 request
     let mut header = [0u8; 4];
     stream.read_exact(&mut header).await?;
-    
+
     if header[0] != 0x05 {
         return Err(ForwardError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            "Invalid SOCKS version in request"
+            "Invalid SOCKS version in request",
         )));
     }
-    
+
     let cmd = header[1];
     let atyp = header[3];
-    
+
     // Only support CONNECT (0x01)
     if cmd != 0x01 {
         // Send "command not supported"
-        stream.write_all(&[0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0]).await?;
+        stream
+            .write_all(&[0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+            .await?;
         return Err(ForwardError::Io(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "Only CONNECT command is supported"
+            "Only CONNECT command is supported",
         )));
     }
-    
+
     // Parse destination address
     let dest_addr = match atyp {
         0x01 => {
@@ -348,35 +398,42 @@ async fn handle_socks5_connection(
         }
         _ => {
             // Send "address type not supported"
-            stream.write_all(&[0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0]).await?;
+            stream
+                .write_all(&[0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+                .await?;
             return Err(ForwardError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "Unsupported address type"
+                "Unsupported address type",
             )));
         }
     };
-    
+
     // Read port
     let mut port_buf = [0u8; 2];
     stream.read_exact(&mut port_buf).await?;
     let dest_port = u16::from_be_bytes(port_buf);
-    
+
     tracing::debug!("SOCKS5 CONNECT to {}:{}", dest_addr, dest_port);
-    
+
     // Open SSH channel to destination
     let target = format!("{}:{}", dest_addr, dest_port);
     match client.open_direct_tcpip_channel(target, None).await {
         Ok(channel) => {
             // Send success response
-            stream.write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]).await?;
-            
+            stream
+                .write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+                .await?;
+
             // Bridge the streams
             let mut channel_stream = channel.into_stream();
             match tokio::io::copy_bidirectional(&mut stream, &mut channel_stream).await {
                 Ok((sent, received)) => {
                     tracing::debug!(
                         "SOCKS5 connection to {}:{} closed. Sent: {}, Received: {}",
-                        dest_addr, dest_port, sent, received
+                        dest_addr,
+                        dest_port,
+                        sent,
+                        received
                     );
                 }
                 Err(e) => {
@@ -385,9 +442,16 @@ async fn handle_socks5_connection(
             }
         }
         Err(e) => {
-            tracing::warn!("SOCKS5 failed to connect to {}:{}: {}", dest_addr, dest_port, e);
+            tracing::warn!(
+                "SOCKS5 failed to connect to {}:{}: {}",
+                dest_addr,
+                dest_port,
+                e
+            );
             // Send "connection refused"
-            stream.write_all(&[0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]).await?;
+            stream
+                .write_all(&[0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+                .await?;
             return Err(ForwardError::RemoteConnectFailed {
                 host: dest_addr,
                 port: dest_port,
@@ -395,6 +459,6 @@ async fn handle_socks5_connection(
             });
         }
     }
-    
+
     Ok(())
 }

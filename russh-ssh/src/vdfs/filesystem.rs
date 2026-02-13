@@ -5,14 +5,14 @@
 //! # Requirements Coverage
 //! - Requirement 5.3: Virtual filesystem interface
 
-use super::chunk::{ChunkStore, chunk_data, reassemble_chunks};
+use super::chunk::{chunk_data, reassemble_chunks, ChunkStore};
 use super::metadata::FileMetadata;
 use super::sync::{SyncEngine, SyncStatus};
 use crate::encryption::hash::hash_data;
 use crate::error::VdfsError;
 use std::path::{Path, PathBuf};
-use tokio::sync::RwLock;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Virtual Distributed File System
 ///
@@ -64,20 +64,20 @@ impl VirtualFs {
     /// Chunks the data, stores chunks, and creates metadata.
     pub async fn write(&self, path: &Path, data: &[u8]) -> Result<FileMetadata, VdfsError> {
         let normalized = self.normalize_path(path);
-        
+
         // Chunk the data
         let chunks = chunk_data(data, self.chunks.chunk_size());
-        
+
         // Store chunks and collect IDs
         let mut chunk_ids = Vec::with_capacity(chunks.len());
         for chunk in chunks {
             let id = self.chunks.store(chunk).await;
             chunk_ids.push(id);
         }
-        
+
         // Compute content hash
         let content_hash = hash_data(data);
-        
+
         // Create metadata
         let metadata = FileMetadata::new_file(
             normalized.clone(),
@@ -85,13 +85,13 @@ impl VirtualFs {
             content_hash,
             chunk_ids,
         );
-        
+
         // Update sync state
         {
             let mut sync = self.sync.write().await;
             sync.create_file(metadata.clone());
         }
-        
+
         Ok(metadata)
     }
 
@@ -100,27 +100,28 @@ impl VirtualFs {
     /// Retrieves chunks and reassembles the file.
     pub async fn read(&self, path: &Path) -> Result<Vec<u8>, VdfsError> {
         let normalized = self.normalize_path(path);
-        
+
         // Get metadata
         let metadata = {
             let sync = self.sync.read().await;
             sync.state().get(&normalized).cloned()
-        }.ok_or_else(|| VdfsError::NotFound(normalized.clone()))?;
-        
+        }
+        .ok_or_else(|| VdfsError::NotFound(normalized.clone()))?;
+
         if !metadata.is_file() {
             return Err(VdfsError::NotFound(normalized));
         }
-        
+
         // Retrieve chunks
         let mut chunks = Vec::with_capacity(metadata.chunks.len());
         for chunk_id in &metadata.chunks {
             let chunk = self.chunks.get(chunk_id).await?;
             chunks.push(chunk);
         }
-        
+
         // Reassemble
         let data = reassemble_chunks(&chunks);
-        
+
         // Verify content hash
         let computed_hash = hash_data(&data);
         if let Some(expected_hash) = &metadata.content_hash {
@@ -131,70 +132,72 @@ impl VirtualFs {
                 });
             }
         }
-        
+
         Ok(data)
     }
 
     /// Delete a file
     pub async fn delete(&self, path: &Path) -> Result<(), VdfsError> {
         let normalized = self.normalize_path(path);
-        
+
         // Check if file exists
         let metadata = {
             let sync = self.sync.read().await;
             sync.state().get(&normalized).cloned()
-        }.ok_or_else(|| VdfsError::NotFound(normalized.clone()))?;
-        
+        }
+        .ok_or_else(|| VdfsError::NotFound(normalized.clone()))?;
+
         // Remove chunks (if not referenced elsewhere - simplified: always remove)
         for chunk_id in &metadata.chunks {
             self.chunks.remove(chunk_id).await;
         }
-        
+
         // Update sync state
         {
             let mut sync = self.sync.write().await;
             sync.delete_file(normalized);
         }
-        
+
         Ok(())
     }
 
     /// Create a directory
     pub async fn mkdir(&self, path: &Path) -> Result<FileMetadata, VdfsError> {
         let normalized = self.normalize_path(path);
-        
+
         let metadata = FileMetadata::new_directory(normalized.clone());
-        
+
         {
             let mut sync = self.sync.write().await;
             sync.create_file(metadata.clone());
         }
-        
+
         Ok(metadata)
     }
 
     /// List directory contents
     pub async fn list(&self, path: &Path) -> Result<Vec<FileMetadata>, VdfsError> {
         let normalized = self.normalize_path(path);
-        
+
         let sync = self.sync.read().await;
-        let files: Vec<FileMetadata> = sync.state()
+        let files: Vec<FileMetadata> = sync
+            .state()
             .list_files()
             .into_iter()
             .filter(|f| {
-                f.path.parent() == Some(&normalized) || 
-                (normalized == self.mount_point && f.path.parent().is_none())
+                f.path.parent() == Some(&normalized)
+                    || (normalized == self.mount_point && f.path.parent().is_none())
             })
             .cloned()
             .collect();
-        
+
         Ok(files)
     }
 
     /// Get file metadata
     pub async fn stat(&self, path: &Path) -> Result<FileMetadata, VdfsError> {
         let normalized = self.normalize_path(path);
-        
+
         let sync = self.sync.read().await;
         sync.state()
             .get(&normalized)
@@ -230,11 +233,11 @@ impl VirtualFs {
     pub async fn stats(&self) -> FsStats {
         let sync = self.sync.read().await;
         let files = sync.state().list_files();
-        
+
         let file_count = files.iter().filter(|f| f.is_file()).count();
         let dir_count = files.iter().filter(|f| f.is_directory()).count();
         let total_size: u64 = files.iter().map(|f| f.size).sum();
-        
+
         FsStats {
             file_count,
             dir_count,
@@ -267,13 +270,13 @@ mod tests {
     #[tokio::test]
     async fn write_and_read_file() {
         let fs = VirtualFs::new("test-node".to_string(), PathBuf::from("/vfs"));
-        
+
         let data = b"Hello, Virtual Filesystem!";
         let metadata = fs.write(Path::new("test.txt"), data).await.unwrap();
-        
+
         assert_eq!(metadata.size, data.len() as u64);
         assert!(metadata.is_file());
-        
+
         let read_data = fs.read(Path::new("test.txt")).await.unwrap();
         assert_eq!(read_data, data);
     }
@@ -281,10 +284,12 @@ mod tests {
     #[tokio::test]
     async fn delete_file() {
         let fs = VirtualFs::new("test-node".to_string(), PathBuf::from("/vfs"));
-        
-        fs.write(Path::new("to_delete.txt"), b"delete me").await.unwrap();
+
+        fs.write(Path::new("to_delete.txt"), b"delete me")
+            .await
+            .unwrap();
         assert!(fs.exists(Path::new("to_delete.txt")).await);
-        
+
         fs.delete(Path::new("to_delete.txt")).await.unwrap();
         assert!(!fs.exists(Path::new("to_delete.txt")).await);
     }
@@ -292,7 +297,7 @@ mod tests {
     #[tokio::test]
     async fn create_directory() {
         let fs = VirtualFs::new("test-node".to_string(), PathBuf::from("/vfs"));
-        
+
         let metadata = fs.mkdir(Path::new("mydir")).await.unwrap();
         assert!(metadata.is_directory());
         assert!(fs.exists(Path::new("mydir")).await);
@@ -301,11 +306,11 @@ mod tests {
     #[tokio::test]
     async fn file_stats() {
         let fs = VirtualFs::new("test-node".to_string(), PathBuf::from("/vfs"));
-        
+
         fs.write(Path::new("file1.txt"), b"content1").await.unwrap();
         fs.write(Path::new("file2.txt"), b"content2").await.unwrap();
         fs.mkdir(Path::new("dir1")).await.unwrap();
-        
+
         let stats = fs.stats().await;
         assert_eq!(stats.file_count, 2);
         assert_eq!(stats.dir_count, 1);

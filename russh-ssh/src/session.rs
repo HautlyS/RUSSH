@@ -9,8 +9,8 @@
 //! - Requirement 8.4: Session persistence
 //! - Requirement 8.7: Session serialization round-trip
 
-pub mod profile;
 pub mod manager;
+pub mod profile;
 
-pub use profile::SessionProfile;
 pub use manager::SessionManager;
+pub use profile::SessionProfile;

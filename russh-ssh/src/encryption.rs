@@ -7,10 +7,10 @@
 //! - BLAKE3 for high-performance cryptographic hashing
 //! - Zero-knowledge key storage principles
 
-pub mod hash;
 pub mod cipher;
+pub mod hash;
 pub mod secure_channel;
 
-pub use hash::*;
 pub use cipher::*;
+pub use hash::*;
 pub use secure_channel::*;

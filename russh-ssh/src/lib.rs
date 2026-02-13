@@ -7,14 +7,14 @@
 //! - Virtual distributed filesystem
 //! - Media streaming capabilities
 
-pub mod error;
 pub mod config;
 pub mod connection;
 pub mod encryption;
+pub mod error;
 pub mod p2p;
-pub mod vdfs;
-pub mod streaming;
 pub mod session;
+pub mod streaming;
+pub mod vdfs;
 
 pub use error::{ConnectionError, ReconnectionError};
 

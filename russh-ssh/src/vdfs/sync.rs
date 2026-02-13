@@ -40,14 +40,9 @@ pub enum FileOperation {
         metadata: Box<FileMetadata>,
     },
     /// Delete a file
-    Delete {
-        path: PathBuf,
-    },
+    Delete { path: PathBuf },
     /// Rename/move a file
-    Move {
-        from: PathBuf,
-        to: PathBuf,
-    },
+    Move { from: PathBuf, to: PathBuf },
 }
 
 impl FileOperation {
@@ -153,8 +148,10 @@ impl SyncState {
             FileOperation::Update { path, metadata } => {
                 if let Some(existing) = self.files.get(path) {
                     // LWW: Only apply if newer
-                    if metadata.version > existing.version 
-                        || (metadata.version == existing.version && op.timestamp > existing.modified) {
+                    if metadata.version > existing.version
+                        || (metadata.version == existing.version
+                            && op.timestamp > existing.modified)
+                    {
                         self.files.insert(path.clone(), *metadata.clone());
                     }
                 } else {
@@ -193,8 +190,10 @@ impl SyncState {
             match self.files.get(path) {
                 Some(self_meta) => {
                     // LWW: Keep the one with higher version, or later timestamp if same version
-                    if other_meta.version > self_meta.version 
-                        || (other_meta.version == self_meta.version && other_meta.modified > self_meta.modified) {
+                    if other_meta.version > self_meta.version
+                        || (other_meta.version == self_meta.version
+                            && other_meta.modified > self_meta.modified)
+                    {
                         self.files.insert(path.clone(), other_meta.clone());
                     }
                 }
@@ -206,9 +205,10 @@ impl SyncState {
 
         // Merge operations (deduplicate by timestamp + node_id)
         for op in &other.operations {
-            let exists = self.operations.iter().any(|o| 
-                o.timestamp == op.timestamp && o.node_id == op.node_id
-            );
+            let exists = self
+                .operations
+                .iter()
+                .any(|o| o.timestamp == op.timestamp && o.node_id == op.node_id);
             if !exists {
                 self.operations.push(op.clone());
             }
@@ -216,7 +216,8 @@ impl SyncState {
 
         // Sort operations by clock, then timestamp
         self.operations.sort_by(|a, b| {
-            a.clock.cmp(&b.clock)
+            a.clock
+                .cmp(&b.clock)
                 .then_with(|| a.timestamp.cmp(&b.timestamp))
         });
     }
@@ -243,7 +244,8 @@ impl SyncState {
 
     /// Get operations since a given clock value
     pub fn operations_since(&self, clock: u64) -> Vec<&TimestampedOp> {
-        self.operations.iter()
+        self.operations
+            .iter()
             .filter(|op| op.clock > clock)
             .collect()
     }
@@ -319,13 +321,13 @@ mod tests {
     #[test]
     fn sync_state_basic_operations() {
         let mut state = SyncState::new("node1".to_string());
-        
+
         let metadata = create_test_metadata("/test.txt");
         state.apply_local(FileOperation::Create {
             path: PathBuf::from("/test.txt"),
             metadata: Box::new(metadata),
         });
-        
+
         assert!(state.get(&PathBuf::from("/test.txt")).is_some());
         assert_eq!(state.clock(), 1);
     }
@@ -334,27 +336,27 @@ mod tests {
     fn sync_state_merge_commutative() {
         let mut state1 = SyncState::new("node1".to_string());
         let mut state2 = SyncState::new("node2".to_string());
-        
+
         let meta1 = create_test_metadata("/file1.txt");
         let meta2 = create_test_metadata("/file2.txt");
-        
+
         state1.apply_local(FileOperation::Create {
             path: PathBuf::from("/file1.txt"),
             metadata: Box::new(meta1.clone()),
         });
-        
+
         state2.apply_local(FileOperation::Create {
             path: PathBuf::from("/file2.txt"),
             metadata: Box::new(meta2.clone()),
         });
-        
+
         // Merge in both directions
         let mut merged1 = state1.clone();
         merged1.merge(&state2);
-        
+
         let mut merged2 = state2.clone();
         merged2.merge(&state1);
-        
+
         // Both should have both files
         assert!(merged1.get(&PathBuf::from("/file1.txt")).is_some());
         assert!(merged1.get(&PathBuf::from("/file2.txt")).is_some());
@@ -365,16 +367,16 @@ mod tests {
     #[test]
     fn sync_state_merge_idempotent() {
         let mut state = SyncState::new("node1".to_string());
-        
+
         let metadata = create_test_metadata("/test.txt");
         state.apply_local(FileOperation::Create {
             path: PathBuf::from("/test.txt"),
             metadata: Box::new(metadata),
         });
-        
+
         let original = state.clone();
         state.merge(&original);
-        
+
         // Should still have exactly one file
         assert_eq!(state.list_files().len(), 1);
     }
@@ -382,12 +384,12 @@ mod tests {
     #[test]
     fn sync_engine_workflow() {
         let mut engine = SyncEngine::new("node1".to_string());
-        
+
         let metadata = create_test_metadata("/doc.txt");
         engine.create_file(metadata);
-        
+
         assert!(engine.state().get(&PathBuf::from("/doc.txt")).is_some());
-        
+
         engine.delete_file(PathBuf::from("/doc.txt"));
         assert!(engine.state().get(&PathBuf::from("/doc.txt")).is_none());
     }

@@ -9,8 +9,8 @@
 use crate::error::P2PError;
 use crate::p2p::connection::{P2PConnection, P2PConnectionInfo};
 use iroh::endpoint::{RecvStream, SendStream};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 /// Statistics for a bidirectional stream
 #[derive(Debug, Default)]
@@ -61,8 +61,8 @@ pub struct BiStream {
 impl BiStream {
     /// Create a new bidirectional stream
     pub fn new(send: SendStream, recv: RecvStream) -> Self {
-        Self { 
-            send, 
+        Self {
+            send,
             recv,
             stats: Arc::new(StreamStats::new()),
         }
@@ -90,9 +90,10 @@ impl BiStream {
 
     /// Write data to the stream
     pub async fn write(&mut self, data: &[u8]) -> Result<(), P2PError> {
-        self.send.write_all(data).await.map_err(|e| {
-            P2PError::Stream(format!("Write failed: {}", e))
-        })?;
+        self.send
+            .write_all(data)
+            .await
+            .map_err(|e| P2PError::Stream(format!("Write failed: {}", e)))?;
         self.stats.add_bytes_sent(data.len() as u64);
         Ok(())
     }
@@ -105,34 +106,40 @@ impl BiStream {
 
     /// Finish the send side (signal end of data)
     pub async fn finish(&mut self) -> Result<(), P2PError> {
-        self.send.finish().map_err(|e| {
-            P2PError::Stream(format!("Finish failed: {}", e))
-        })
+        self.send
+            .finish()
+            .map_err(|e| P2PError::Stream(format!("Finish failed: {}", e)))
     }
 
     /// Read data from the stream
     pub async fn read(&mut self, buf: &mut [u8]) -> Result<usize, P2PError> {
-        let bytes_read = self.recv.read(buf).await.map_err(|e| {
-            P2PError::Stream(format!("Read failed: {}", e))
-        })?.unwrap_or(0);
+        let bytes_read = self
+            .recv
+            .read(buf)
+            .await
+            .map_err(|e| P2PError::Stream(format!("Read failed: {}", e)))?
+            .unwrap_or(0);
         self.stats.add_bytes_received(bytes_read as u64);
         Ok(bytes_read)
     }
 
     /// Read all data until end of stream
     pub async fn read_to_end(&mut self, max_size: usize) -> Result<Vec<u8>, P2PError> {
-        let data = self.recv.read_to_end(max_size).await.map_err(|e| {
-            P2PError::Stream(format!("Read to end failed: {}", e))
-        })?;
+        let data = self
+            .recv
+            .read_to_end(max_size)
+            .await
+            .map_err(|e| P2PError::Stream(format!("Read to end failed: {}", e)))?;
         self.stats.add_bytes_received(data.len() as u64);
         Ok(data)
     }
 
     /// Read exact number of bytes
     pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), P2PError> {
-        self.recv.read_exact(buf).await.map_err(|e| {
-            P2PError::Stream(format!("Read exact failed: {}", e))
-        })?;
+        self.recv
+            .read_exact(buf)
+            .await
+            .map_err(|e| P2PError::Stream(format!("Read exact failed: {}", e)))?;
         self.stats.add_bytes_received(buf.len() as u64);
         Ok(())
     }
@@ -158,7 +165,9 @@ impl StreamManager {
     /// # Requirements Coverage
     /// - Requirement 3.4: Multiplexed bidirectional streams
     pub async fn open_bi(&self) -> Result<BiStream, P2PError> {
-        let (send, recv) = self.connection.connection()
+        let (send, recv) = self
+            .connection
+            .connection()
             .open_bi()
             .await
             .map_err(|e| P2PError::Stream(format!("Failed to open stream: {}", e)))?;
@@ -168,7 +177,9 @@ impl StreamManager {
 
     /// Accept an incoming bidirectional stream
     pub async fn accept_bi(&self) -> Result<BiStream, P2PError> {
-        let (send, recv) = self.connection.connection()
+        let (send, recv) = self
+            .connection
+            .connection()
             .accept_bi()
             .await
             .map_err(|e| P2PError::Stream(format!("Failed to accept stream: {}", e)))?;
@@ -178,7 +189,8 @@ impl StreamManager {
 
     /// Open a unidirectional send stream
     pub async fn open_uni(&self) -> Result<SendStream, P2PError> {
-        self.connection.connection()
+        self.connection
+            .connection()
             .open_uni()
             .await
             .map_err(|e| P2PError::Stream(format!("Failed to open uni stream: {}", e)))
@@ -186,7 +198,8 @@ impl StreamManager {
 
     /// Accept an incoming unidirectional receive stream
     pub async fn accept_uni(&self) -> Result<RecvStream, P2PError> {
-        self.connection.connection()
+        self.connection
+            .connection()
             .accept_uni()
             .await
             .map_err(|e| P2PError::Stream(format!("Failed to accept uni stream: {}", e)))
@@ -214,10 +227,16 @@ impl StreamManager {
 /// Helper trait for stream operations
 pub trait StreamExt {
     /// Send a length-prefixed message
-    fn send_message(&mut self, data: &[u8]) -> impl std::future::Future<Output = Result<(), P2PError>> + Send;
-    
+    fn send_message(
+        &mut self,
+        data: &[u8],
+    ) -> impl std::future::Future<Output = Result<(), P2PError>> + Send;
+
     /// Receive a length-prefixed message
-    fn recv_message(&mut self, max_size: usize) -> impl std::future::Future<Output = Result<Vec<u8>, P2PError>> + Send;
+    fn recv_message(
+        &mut self,
+        max_size: usize,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, P2PError>> + Send;
 }
 
 impl StreamExt for BiStream {

@@ -1,6 +1,5 @@
 //! Error types for the RUSSH Client
 
-
 use thiserror::Error;
 
 /// Application error type

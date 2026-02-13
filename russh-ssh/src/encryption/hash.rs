@@ -42,10 +42,10 @@ impl ContentHash {
 
         let mut bytes = [0u8; HASH_SIZE];
         for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-            let hex_byte = std::str::from_utf8(chunk)
-                .map_err(|_| HashError::InvalidHexCharacter)?;
-            bytes[i] = u8::from_str_radix(hex_byte, 16)
-                .map_err(|_| HashError::InvalidHexCharacter)?;
+            let hex_byte =
+                std::str::from_utf8(chunk).map_err(|_| HashError::InvalidHexCharacter)?;
+            bytes[i] =
+                u8::from_str_radix(hex_byte, 16).map_err(|_| HashError::InvalidHexCharacter)?;
         }
 
         Ok(ContentHash(blake3::Hash::from_bytes(bytes)))
@@ -115,7 +115,7 @@ pub fn hash_hex(data: &[u8]) -> String {
 }
 
 /// Compute BLAKE3 hash of a file (synchronous - use hash_file_async for async contexts)
-/// 
+///
 /// WARNING: This function uses blocking I/O. In async contexts, use `hash_file_async` instead
 /// to avoid blocking the async runtime.
 pub fn hash_file(path: &Path) -> Result<ContentHash, HashError> {
@@ -135,12 +135,12 @@ pub fn hash_file(path: &Path) -> Result<ContentHash, HashError> {
 }
 
 /// Compute BLAKE3 hash of a file asynchronously
-/// 
+///
 /// This uses tokio's async file I/O to avoid blocking the runtime.
 /// Preferred over `hash_file` in async contexts.
 pub async fn hash_file_async(path: &Path) -> Result<ContentHash, HashError> {
     use tokio::io::AsyncReadExt;
-    
+
     let mut file = tokio::fs::File::open(path).await?;
     let mut hasher = blake3::Hasher::new();
     let mut buffer = vec![0u8; 8192];
@@ -157,10 +157,12 @@ pub async fn hash_file_async(path: &Path) -> Result<ContentHash, HashError> {
 }
 
 /// Compute BLAKE3 hash of a file using spawn_blocking (for use in async contexts with sync file access)
-/// 
+///
 /// This spawns the blocking file read on a dedicated thread pool, preventing
 /// blocking of the async runtime while still using efficient synchronous I/O.
-pub async fn hash_file_spawn_blocking(path: impl AsRef<Path> + Send + 'static) -> Result<ContentHash, HashError> {
+pub async fn hash_file_spawn_blocking(
+    path: impl AsRef<Path> + Send + 'static,
+) -> Result<ContentHash, HashError> {
     tokio::task::spawn_blocking(move || hash_file(path.as_ref()))
         .await
         .map_err(|e| HashError::Io(std::io::Error::other(e.to_string())))?

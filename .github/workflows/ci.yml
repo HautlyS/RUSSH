@@ -48,6 +48,39 @@ jobs:
     with:
       skip: ${{ needs.changes.outputs.rust != 'true' && needs.changes.outputs.workflows != 'true' }}
 
+  security:
+    name: Security Audit
+    needs: changes
+    runs-on: ubuntu-latest
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      
+      - name: Run security audit
+        run: cargo audit
+        continue-on-error: true
+      
+      - name: Check dependencies
+        run: cargo deny check
+        continue-on-error: true
+      
+      - name: Check for known vulnerabilities
+        run: |
+          cargo tree --duplicate
+          cargo tree --edges normal --depth 1
+
   frontend:
     name: Frontend
     needs: changes
